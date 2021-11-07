@@ -1,0 +1,38 @@
+#pragma once
+
+#include <string>
+#define GLFW_INCLUDE_VULKAN
+#define VK_NO_PROTOTYPES
+#include <GLFW/glfw3.h>
+
+class Window {
+  public:
+	Window(const std::string_view& windowName);
+	Window(const std::string_view& windowName, size_t windowWidth, size_t windowHeight);
+	~Window();
+
+	Window(const Window&) = delete;
+	Window& operator=(const Window&) = delete;
+	Window(Window&&) = delete;
+	Window& operator=(Window&&) = delete;
+
+	VkSurfaceKHR createSurface(VkInstance instance) const;
+
+	size_t width() const { return m_width; }
+	size_t height() const { return m_height; }
+
+	bool windowSizeDirty() const { return m_windowSizeDirty; }
+
+	void pollEvents();
+	void waitEvents();
+
+	bool shouldWindowClose();
+
+  private:
+	static bool m_didInit;
+
+	size_t m_width, m_height;
+	bool m_windowSizeDirty;
+
+	GLFWwindow* m_window;
+};
