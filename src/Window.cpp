@@ -69,4 +69,4 @@ void Window::waitEvents() {
 	}
 }
 
-bool Window::shouldWindowClose() { return !glfwWindowShouldClose(m_window); }
+bool Window::shouldWindowClose() const { return glfwWindowShouldClose(m_window); }

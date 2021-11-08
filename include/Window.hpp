@@ -26,7 +26,7 @@ class Window {
 	void pollEvents();
 	void waitEvents();
 
-	bool shouldWindowClose();
+	bool shouldWindowClose() const;
 
   private:
 	static bool m_didInit;

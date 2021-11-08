@@ -6,7 +6,7 @@
 int main() {
 	verifyResult(volkInitialize());
 
-	HardwareRaytracer raytracer = HardwareRaytracer(640, 480);
+	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480);
 
 	while (raytracer.update()) {
 	}

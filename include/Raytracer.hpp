@@ -1,55 +1,38 @@
 #pragma once
 
-#include <Window.hpp>
-#include <vector>
+#include <RayTracingDevice.hpp>
 
-class HardwareRaytracer {
+struct Sphere {
+	float position[3];
+	float radius;
+};
+
+class HardwareSphereRaytracer {
   public:
-	HardwareRaytracer(size_t windowWidth, size_t windowHeight);
-
-	HardwareRaytracer(const HardwareRaytracer&) = delete;
-	HardwareRaytracer& operator=(const HardwareRaytracer&) = delete;
-	HardwareRaytracer(HardwareRaytracer&&) = default;
-	HardwareRaytracer& operator=(HardwareRaytracer&&) = default;
-
-	~HardwareRaytracer();
+	HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount);
+	~HardwareSphereRaytracer();
+	//RayTracingDevice already deletes/defaults copy/move constructors
 
 	bool update();
 
+	void buildAccelerationStructures(const std::vector<Sphere> spheres);
+
   private:
-	static constexpr bool m_enableDebugUtils = true;
-	static constexpr bool m_enableValidation = true;
-	static constexpr uint32_t m_frameInFlightCount = 3;
+	size_t prevSphereCount = 0;
 
-	void createPerFrameData(size_t index);
-	void createSwapchainResources();
+	VkDeviceMemory m_accelerationStructureMemory;
+	VkBuffer m_accelerationStructureBuffer;
+	VkBuffer m_scratchBuffer;
 
-	bool canRecreateSwapchain();
+	VkDeviceMemory m_dataStagingMemory;
+	VkBuffer m_stagingBuffer;
 
-	Window m_window;
+	VkCommandPool m_buildCommandPool;
+	VkCommandBuffer m_buildCommandBuffer;
 
-	VkInstance m_instance;
-	VkDebugUtilsMessengerEXT m_messenger;
+	VkFence m_buildSyncFence;
 
-	VkPhysicalDevice m_physicalDevice;
-	VkDevice m_device;
-	uint32_t m_queueFamilyIndex;
-	VkQueue m_queue;
+	VkAccelerationStructureKHR m_accelerationStructure;
 
-	VkSurfaceKHR m_surface;
-	VkSwapchainKHR m_swapchain;
-	bool m_isSwapchainGood = true;
-	std::vector<VkImageView> m_swapchainViews;
-	std::vector<VkImage> m_swapchainImages;
-
-	struct PerFrameData {
-		VkCommandPool pool;
-		VkCommandBuffer commandBuffer;
-		VkSemaphore acquireDoneSemaphore;
-		VkSemaphore presentReadySemaphore;
-		VkFence fence;
-	};
-
-	PerFrameData m_perFrameData[m_frameInFlightCount];
-	uint32_t m_currentFrameIndex = 0;
+	RayTracingDevice m_device;
 };
