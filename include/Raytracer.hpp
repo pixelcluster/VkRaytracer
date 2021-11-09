@@ -15,7 +15,7 @@ class HardwareSphereRaytracer {
 
 	bool update();
 
-	void buildAccelerationStructures(const std::vector<Sphere> spheres);
+	void buildAccelerationStructures(const std::vector<Sphere>& spheres);
 
   private:
 	void addDataBuffer(const VkBufferCreateInfo& info, VkMemoryPropertyFlags additionalRequiredFlags,
@@ -25,11 +25,15 @@ class HardwareSphereRaytracer {
 	void bindDataBuffer(BufferAllocation& allocation, VkDeviceMemory memory, BufferAllocationRequirements& requirements,
 						VkDeviceSize& mergedMemoryOffset);
 
+	VkAccelerationStructureBuildSizesInfoKHR blasSize(size_t sphereCount);
+	VkAccelerationStructureBuildSizesInfoKHR tlasSize(size_t sphereCount);
+
 	size_t prevSphereCount = 0;
 
 	VkDeviceMemory m_deviceMemory;
 
 	BufferAllocation m_accelerationStructureBuffer;
+	BufferAllocation m_accelerationStructureScratchBuffer;
 	BufferAllocation m_accelerationStructureDataBuffer;
 	BufferAllocation m_sphereDataBuffer;
 
