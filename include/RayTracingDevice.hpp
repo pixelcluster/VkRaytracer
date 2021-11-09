@@ -16,6 +16,17 @@ struct FrameData {
 	uint32_t swapchainImageIndex = 0;
 };
 
+struct BufferAllocation {
+	VkBuffer buffer;
+	VkDeviceMemory dedicatedMemory = VK_NULL_HANDLE;
+};
+
+struct BufferAllocationRequirements {
+	VkDeviceSize size, alignment;
+	VkMemoryPropertyFlags memoryTypeBits;
+	bool makeDedicatedAllocation;
+};
+
 class RayTracingDevice {
   public:
 	RayTracingDevice(size_t windowWidth, size_t windowHeight, bool enableHardwareRaytracing);
@@ -37,6 +48,14 @@ class RayTracingDevice {
 	VkQueue queue() const { return m_queue; }
 	uint32_t queueFamilyIndex() const { return m_queueFamilyIndex; }
 	VkInstance instance() const { return m_instance; }
+
+	uint32_t findBestMemoryIndex(VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred,
+								 VkMemoryPropertyFlags forbidden);
+
+	BufferAllocationRequirements requirements(VkBuffer buffer);
+
+	void allocateDedicated(BufferAllocation& allocation, VkDeviceSize requiredSize, VkMemoryPropertyFlags required,
+						   VkMemoryPropertyFlags preferred, VkMemoryPropertyFlags forbidden);
 
 	const Window& window() const { return m_window; }
 
@@ -61,6 +80,8 @@ class RayTracingDevice {
 	bool m_isSwapchainGood = true;
 	std::vector<VkImageView> m_swapchainViews;
 	std::vector<VkImage> m_swapchainImages;
+
+	VkPhysicalDeviceMemoryProperties m_memoryProperties;
 
 	struct PerFrameData {
 		VkCommandPool pool;

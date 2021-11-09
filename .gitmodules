@@ -4,6 +4,3 @@
 [submodule "dependencies/volk"]
 	path = dependencies/volk
 	url = https://github.com/zeux/volk.git
-[submodule "dependencies/vma"]
-	path = dependencies/vma
-	url = https://github.com/GPUOpen-LibrariesAndSdks/VulkanMemoryAllocator.git

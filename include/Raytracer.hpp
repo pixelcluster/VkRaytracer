@@ -11,21 +11,29 @@ class HardwareSphereRaytracer {
   public:
 	HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount);
 	~HardwareSphereRaytracer();
-	//RayTracingDevice already deletes/defaults copy/move constructors
+	// RayTracingDevice already deletes/defaults copy/move constructors
 
 	bool update();
 
 	void buildAccelerationStructures(const std::vector<Sphere> spheres);
 
   private:
+	void addDataBuffer(const VkBufferCreateInfo& info, VkMemoryPropertyFlags additionalRequiredFlags,
+					   VkMemoryPropertyFlags preferredFlags, BufferAllocation& targetAllocation,
+					   BufferAllocationRequirements& targetRequirements, VkDeviceSize& mergedMemorySize);
+
+	void bindDataBuffer(BufferAllocation& allocation, VkDeviceMemory memory, BufferAllocationRequirements& requirements,
+						VkDeviceSize& mergedMemoryOffset);
+
 	size_t prevSphereCount = 0;
 
-	VkDeviceMemory m_accelerationStructureMemory;
-	VkBuffer m_accelerationStructureBuffer;
-	VkBuffer m_scratchBuffer;
+	VkDeviceMemory m_deviceMemory;
 
-	VkDeviceMemory m_dataStagingMemory;
-	VkBuffer m_stagingBuffer;
+	BufferAllocation m_accelerationStructureBuffer;
+	BufferAllocation m_accelerationStructureDataBuffer;
+	BufferAllocation m_sphereDataBuffer;
+
+	BufferAllocation m_stagingBuffer;
 
 	VkCommandPool m_buildCommandPool;
 	VkCommandBuffer m_buildCommandBuffer;

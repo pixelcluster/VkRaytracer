@@ -4,12 +4,6 @@
 
 HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount)
 	: m_device(windowWidth, windowHeight, false) {
-	VkBufferCreateInfo stagingBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-												   .size = static_cast<uint32_t>(
-													   (sizeof(VkAabbPositionsKHR) + sizeof(float) * 4) * sphereCount),
-												   .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-												   .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
-
 	VkAccelerationStructureGeometryAabbsDataKHR geometryData{
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR, .stride = sizeof(VkAabbPositionsKHR)
 	};
@@ -43,14 +37,89 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 
 	size_t scratchSize = std::max(sizesInfo.buildScratchSize, sizesInfo.updateScratchSize);
 
-	size_t deviceMemorySize = sizesInfo.accelerationStructureSize + sphereCount * sizeof(VkAabbPositionsKHR) +
-							  scratchSize + structureProperties.minAccelerationStructureScratchOffsetAlignment;
+	VkDeviceSize mergedAllocationSize = 0;
+	VkDeviceSize stagingAllocationSize = 0;
 
-	verifyResult(vkAllocateMemory(m_device.device(), ))
+	VkBufferCreateInfo stagingBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+												   .size = static_cast<uint32_t>(
+													   (sizeof(VkAabbPositionsKHR) + sizeof(float) * 4) * sphereCount),
+												   .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+												   .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
+	VkBufferCreateInfo structureBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+													 .size = sizesInfo.accelerationStructureSize,
+													 .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+															  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+													 .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
+	VkBufferCreateInfo dataBufferCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = sizeof(VkAabbPositionsKHR) * sphereCount,
+		.usage =
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+	};
+	VkBufferCreateInfo sphereDataBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+													  .size = sizeof(float) * 4 * sphereCount,
+													  .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+															   VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+													  .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
 
-		VkAccelerationStructureCreateInfoKHR accelerationStructureCreateInfo = {
+	BufferAllocationRequirements stagingBufferRequirements;
+	BufferAllocationRequirements structureBufferRequirements;
+	BufferAllocationRequirements dataBufferRequirements;
+	BufferAllocationRequirements sphereDataBufferRequirements;
 
-		};
+	addDataBuffer(stagingBufferCreateInfo, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				  m_stagingBuffer, stagingBufferRequirements, stagingAllocationSize);
+
+	addDataBuffer(structureBufferCreateInfo, 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_accelerationStructureBuffer,
+				  structureBufferRequirements, mergedAllocationSize);
+
+	addDataBuffer(dataBufferCreateInfo, 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_accelerationStructureDataBuffer,
+				  dataBufferRequirements, mergedAllocationSize);
+
+	addDataBuffer(sphereDataBufferCreateInfo, 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_sphereDataBuffer,
+				  sphereDataBufferRequirements, mergedAllocationSize);
+
+	if (mergedAllocationSize > 0) {
+		VkMemoryPropertyFlags requiredFlags = 0;
+		requiredFlags |=
+			structureBufferRequirements.makeDedicatedAllocation ? 0 : structureBufferRequirements.memoryTypeBits;
+		requiredFlags |= dataBufferRequirements.makeDedicatedAllocation ? 0 : dataBufferRequirements.memoryTypeBits;
+		requiredFlags |=
+			sphereDataBufferRequirements.makeDedicatedAllocation ? 0 : sphereDataBufferRequirements.memoryTypeBits;
+
+		VkMemoryAllocateInfo memoryAllocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+													.allocationSize = mergedAllocationSize,
+													.memoryTypeIndex = m_device.findBestMemoryIndex(
+														requiredFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0) };
+		verifyResult(vkAllocateMemory(m_device.device(), &memoryAllocateInfo, nullptr, &m_deviceMemory));
+
+		VkDeviceSize mergedMemoryOffset = 0;
+		if (!structureBufferRequirements.makeDedicatedAllocation)
+			bindDataBuffer(m_accelerationStructureBuffer, m_deviceMemory, structureBufferRequirements,
+						   mergedMemoryOffset);
+		if (!dataBufferRequirements.makeDedicatedAllocation)
+			bindDataBuffer(m_accelerationStructureDataBuffer, m_deviceMemory, dataBufferRequirements,
+						   mergedMemoryOffset);
+		if (!sphereDataBufferRequirements.makeDedicatedAllocation)
+			bindDataBuffer(m_sphereDataBuffer, m_deviceMemory, sphereDataBufferRequirements, mergedMemoryOffset);
+	}
+
+	if (stagingAllocationSize > 0) {
+		VkMemoryAllocateInfo memoryAllocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+													.allocationSize = stagingAllocationSize,
+													.memoryTypeIndex = m_device.findBestMemoryIndex(
+														stagingBufferRequirements.memoryTypeBits |
+															VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+														VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0) };
+		verifyResult(vkAllocateMemory(m_device.device(), &memoryAllocateInfo, nullptr, &m_stagingBuffer.dedicatedMemory));
+
+		vkBindBufferMemory(m_device.device(), )
+	}
+
+	VkAccelerationStructureCreateInfoKHR accelerationStructureCreateInfo = {
+
+	};
 }
 
 HardwareSphereRaytracer::~HardwareSphereRaytracer() {}
@@ -102,3 +171,37 @@ bool HardwareSphereRaytracer::update() {
 }
 
 void HardwareSphereRaytracer::buildAccelerationStructures(const std::vector<Sphere>& spheres) {}
+
+void HardwareSphereRaytracer::addDataBuffer(const VkBufferCreateInfo& info,
+											VkMemoryPropertyFlags additionalRequiredFlags,
+											VkMemoryPropertyFlags preferredFlags, BufferAllocation& targetAllocation,
+											BufferAllocationRequirements& targetRequirements,
+											VkDeviceSize& mergedMemorySize) {
+	vkCreateBuffer(m_device.device(), &info, nullptr, &targetAllocation.buffer);
+
+	targetRequirements = m_device.requirements(targetAllocation.buffer);
+	if (targetRequirements.makeDedicatedAllocation)
+		m_device.allocateDedicated(targetAllocation, targetRequirements.size,
+								   targetRequirements.memoryTypeBits | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, 0, 0);
+	else {
+		if (targetRequirements.alignment) {
+			size_t alignmentRemainder = mergedMemorySize % targetRequirements.alignment;
+			if (alignmentRemainder)
+				mergedMemorySize += targetRequirements.alignment - alignmentRemainder;
+		}
+		mergedMemorySize += targetRequirements.size;
+	}
+}
+
+void HardwareSphereRaytracer::bindDataBuffer(BufferAllocation& allocation, VkDeviceMemory memory,
+											 BufferAllocationRequirements& requirements,
+											 VkDeviceSize& mergedMemoryOffset) {
+	if (requirements.alignment) {
+		size_t alignmentRemainder = mergedMemoryOffset % requirements.alignment;
+		if (alignmentRemainder)
+			mergedMemoryOffset += requirements.alignment - alignmentRemainder;
+	}
+	verifyResult(vkBindBufferMemory(m_device.device(), allocation.buffer, memory, mergedMemoryOffset));
+
+	mergedMemoryOffset += requirements.size;
+}

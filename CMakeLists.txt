@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 add_subdirectory(dependencies/glfw)
 add_subdirectory(dependencies/volk)
-add_subdirectory(dependencies/vma)
 
 if(UNIX AND NOT APPLE)
 	option(USE_WAYLAND "Use Wayland instead of X11")
@@ -30,4 +29,4 @@ add_executable(VkRaytracer ${CPP_SOURCES} ${HEADERS})
 
 target_include_directories(VkRaytracer PUBLIC "include" Vulkan_INCLUDE_DIRS)
 
-target_link_libraries(VkRaytracer glfw volk::volk VulkanMemoryAllocator)
+target_link_libraries(VkRaytracer glfw volk::volk)

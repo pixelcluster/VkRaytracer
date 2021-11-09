@@ -1,8 +1,10 @@
 #include <RayTracingDevice.hpp>
 #include <SwapchainHelper.hpp>
 #include <algorithm>
+#include <cstring>
 #include <exception>
 #include <iostream>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <volk.h>
@@ -211,6 +213,8 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 								  VK_NULL_HANDLE, enableDebugUtils);
 
 	createSwapchainResources();
+
+	vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &m_memoryProperties);
 }
 
 RayTracingDevice::~RayTracingDevice() {
@@ -441,4 +445,68 @@ bool RayTracingDevice::endFrame() {
 
 	++m_currentFrameIndex %= frameInFlightCount;
 	return !m_window.shouldWindowClose();
+}
+
+uint32_t RayTracingDevice::findBestMemoryIndex(VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred,
+											   VkMemoryPropertyFlags forbidden) {
+	uint32_t bestFittingIndex = -1U;
+	uint32_t numMatchingPreferredFlags = 0;
+	uint32_t numUnrelatedFlags = -1U;
+
+	for (uint32_t i = 0; i < m_memoryProperties.memoryTypeCount; ++i) {
+		if (!(m_memoryProperties.memoryTypes[i].propertyFlags & required) ||
+			(m_memoryProperties.memoryTypes[i].propertyFlags & forbidden)) {
+			continue;
+		}
+
+		VkMemoryPropertyFlags matchingPreferredFlags = m_memoryProperties.memoryTypes[i].propertyFlags & preferred;
+		VkMemoryPropertyFlags unrelatedFlags =
+			m_memoryProperties.memoryTypes[i].propertyFlags & ~(required | preferred);
+
+		uint32_t setPreferredBitCount = std::popcount(matchingPreferredFlags);
+		uint32_t setUnrelatedBitCount = std::popcount(unrelatedFlags);
+
+		if (setPreferredBitCount > numMatchingPreferredFlags ||
+			setPreferredBitCount == numMatchingPreferredFlags && setUnrelatedBitCount < numUnrelatedFlags) {
+			bestFittingIndex = i;
+			numMatchingPreferredFlags = setPreferredBitCount;
+			numUnrelatedFlags = setUnrelatedBitCount;
+		}
+	}
+
+	return bestFittingIndex;
+}
+
+BufferAllocationRequirements RayTracingDevice::requirements(VkBuffer buffer) {
+	VkMemoryDedicatedRequirements dedicatedRequirements = { .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS };
+
+	VkMemoryRequirements2 memoryRequirements = { .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+												 .pNext = &dedicatedRequirements };
+
+	VkBufferMemoryRequirementsInfo2 memoryRequirementsInfo = { .sType =
+																   VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2,
+															   .buffer = buffer };
+
+	vkGetBufferMemoryRequirements2(m_device, &memoryRequirementsInfo, &memoryRequirements);
+
+	return BufferAllocationRequirements{ .size = memoryRequirements.memoryRequirements.size,
+										 .alignment = memoryRequirements.memoryRequirements.alignment,
+										 .memoryTypeBits = memoryRequirements.memoryRequirements.memoryTypeBits,
+										 .makeDedicatedAllocation = dedicatedRequirements.requiresDedicatedAllocation ||
+																	dedicatedRequirements.prefersDedicatedAllocation };
+}
+
+void RayTracingDevice::allocateDedicated(BufferAllocation& allocation, VkDeviceSize requiredSize,
+										 VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred,
+										 VkMemoryPropertyFlags forbidden) {
+	VkMemoryDedicatedAllocateInfo dedicatedAllocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
+															.buffer = allocation.buffer };
+	VkMemoryAllocateInfo allocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+										  .pNext = &dedicatedAllocateInfo,
+										  .allocationSize = requiredSize,
+										  .memoryTypeIndex = findBestMemoryIndex(required, preferred, forbidden) };
+
+	vkAllocateMemory(m_device, &allocateInfo, nullptr, &allocation.dedicatedMemory);
+
+	vkBindBufferMemory(m_device, allocation.buffer, allocation.dedicatedMemory, 0);
 }
