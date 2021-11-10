@@ -14,11 +14,14 @@ struct FrameData {
 	VkImage swapchainImage = VK_NULL_HANDLE;
 	VkImageView swapchainImageView = VK_NULL_HANDLE;
 	uint32_t swapchainImageIndex = 0;
+	uint32_t frameIndex = 0;
 };
 
 struct BufferAllocation {
 	VkBuffer buffer;
 	VkDeviceMemory dedicatedMemory = VK_NULL_HANDLE;
+	VkDeviceSize dataSize; // The size of the data section. May not be equal to the buffer size if the buffer contains
+						   // multiple mirrors.
 };
 
 struct BufferAllocationRequirements {

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <RayTracingDevice.hpp>
+#include <AccelerationStructureManager.hpp>
 
 struct Sphere {
-	float position[3];
+	float position[4];
 	float radius;
+	float color[4];
 };
 
 class HardwareSphereRaytracer {
@@ -13,38 +15,22 @@ class HardwareSphereRaytracer {
 	~HardwareSphereRaytracer();
 	// RayTracingDevice already deletes/defaults copy/move constructors
 
-	bool update();
-
-	void buildAccelerationStructures(const std::vector<Sphere>& spheres);
+	bool update(const std::vector<Sphere>& spheres);
 
   private:
-	void addDataBuffer(const VkBufferCreateInfo& info, VkMemoryPropertyFlags additionalRequiredFlags,
-					   VkMemoryPropertyFlags preferredFlags, BufferAllocation& targetAllocation,
-					   BufferAllocationRequirements& targetRequirements, VkDeviceSize& mergedMemorySize);
+	static constexpr size_t m_blasIndex = 0;
+	static constexpr size_t m_tlasIndex = 1;
 
-	void bindDataBuffer(BufferAllocation& allocation, VkDeviceMemory memory, BufferAllocationRequirements& requirements,
-						VkDeviceSize& mergedMemoryOffset);
+	bool m_hasBuiltAccelerationStructure = false;
 
-	VkAccelerationStructureBuildSizesInfoKHR blasSize(size_t sphereCount);
-	VkAccelerationStructureBuildSizesInfoKHR tlasSize(size_t sphereCount);
-
-	size_t prevSphereCount = 0;
+	AccelerationStructureBatchData m_structureData;
 
 	VkDeviceMemory m_deviceMemory;
-
-	BufferAllocation m_accelerationStructureBuffer;
-	BufferAllocation m_accelerationStructureScratchBuffer;
 	BufferAllocation m_accelerationStructureDataBuffer;
 	BufferAllocation m_sphereDataBuffer;
 
 	BufferAllocation m_stagingBuffer;
-
-	VkCommandPool m_buildCommandPool;
-	VkCommandBuffer m_buildCommandBuffer;
-
-	VkFence m_buildSyncFence;
-
-	VkAccelerationStructureKHR m_accelerationStructure;
+	void* m_mappedStagingBuffer;
 
 	RayTracingDevice m_device;
 };

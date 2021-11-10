@@ -399,7 +399,8 @@ FrameData RayTracingDevice::beginFrame() {
 	return FrameData{ .commandBuffer = m_perFrameData[m_currentFrameIndex].commandBuffer,
 					  .swapchainImage = m_swapchainImages[m_currentImageIndex],
 					  .swapchainImageView = m_swapchainViews[m_currentImageIndex],
-					  .swapchainImageIndex = m_currentImageIndex };
+					  .swapchainImageIndex = m_currentImageIndex,
+					  .frameIndex = m_currentFrameIndex };
 }
 
 bool RayTracingDevice::endFrame() {
