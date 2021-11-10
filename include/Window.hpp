@@ -29,10 +29,9 @@ class Window {
 	bool shouldWindowClose() const;
 
   private:
-	static bool m_didInit;
 
 	size_t m_width, m_height;
-	bool m_windowSizeDirty;
+	bool m_windowSizeDirty = false;
 
 	GLFWwindow* m_window;
 };

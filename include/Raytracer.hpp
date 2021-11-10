@@ -29,6 +29,9 @@ class HardwareSphereRaytracer {
 	BufferAllocation m_accelerationStructureDataBuffer;
 	BufferAllocation m_sphereDataBuffer;
 
+	VkDeviceAddress m_accelerationStructureDataDeviceAddress;
+	VkDeviceAddress m_scratchBufferBaseDeviceAddress;
+
 	BufferAllocation m_stagingBuffer;
 	void* m_mappedStagingBuffer;
 

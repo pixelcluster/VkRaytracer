@@ -164,9 +164,14 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		.pNext = &rayTracingFeatures,
 		.accelerationStructure = VK_TRUE
 	};
+	VkPhysicalDeviceBufferDeviceAddressFeatures deviceAddressFeatures = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+		.pNext = &accelerationStructureFeatures,
+		.bufferDeviceAddress = VK_TRUE
+	};
 	VkPhysicalDeviceFeatures2 features = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
 										   .pNext =
-											   enableHardwareRaytracing ? &accelerationStructureFeatures : nullptr };
+											   enableHardwareRaytracing ? &deviceAddressFeatures : nullptr};
 
 	std::vector<const char*> deviceExtensionNames;
 	if (enableHardwareRaytracing) {
@@ -218,12 +223,6 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 }
 
 RayTracingDevice::~RayTracingDevice() {
-	VkFence fences[frameInFlightCount];
-	for (size_t i = 0; i < frameInFlightCount; ++i) {
-		fences[i] = m_perFrameData[i].fence;
-	}
-	verifyResult(vkWaitForFences(m_device, frameInFlightCount, fences, VK_TRUE, UINT64_MAX));
-
 	for (size_t i = 0; i < frameInFlightCount; ++i) {
 		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
 		vkDestroySemaphore(m_device, m_perFrameData[i].presentReadySemaphore, nullptr);
@@ -455,7 +454,7 @@ uint32_t RayTracingDevice::findBestMemoryIndex(VkMemoryPropertyFlags required, V
 	uint32_t numUnrelatedFlags = -1U;
 
 	for (uint32_t i = 0; i < m_memoryProperties.memoryTypeCount; ++i) {
-		if (!(m_memoryProperties.memoryTypes[i].propertyFlags & required) ||
+		if ((m_memoryProperties.memoryTypes[i].propertyFlags & required) != required ||
 			(m_memoryProperties.memoryTypes[i].propertyFlags & forbidden)) {
 			continue;
 		}
@@ -510,4 +509,12 @@ void RayTracingDevice::allocateDedicated(BufferAllocation& allocation, VkDeviceS
 	vkAllocateMemory(m_device, &allocateInfo, nullptr, &allocation.dedicatedMemory);
 
 	vkBindBufferMemory(m_device, allocation.buffer, allocation.dedicatedMemory, 0);
+}
+
+void RayTracingDevice::waitAllFences() const {
+	VkFence fences[frameInFlightCount];
+	for (size_t i = 0; i < frameInFlightCount; ++i) {
+		fences[i] = m_perFrameData[i].fence;
+	}
+	verifyResult(vkWaitForFences(m_device, frameInFlightCount, fences, VK_TRUE, UINT64_MAX));
 }

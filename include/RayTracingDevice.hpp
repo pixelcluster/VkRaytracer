@@ -60,6 +60,8 @@ class RayTracingDevice {
 	void allocateDedicated(BufferAllocation& allocation, VkDeviceSize requiredSize, VkMemoryPropertyFlags required,
 						   VkMemoryPropertyFlags preferred, VkMemoryPropertyFlags forbidden);
 
+	void waitAllFences() const;
+
 	const Window& window() const { return m_window; }
 
   private:

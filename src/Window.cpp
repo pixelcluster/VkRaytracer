@@ -1,11 +1,7 @@
 #include <ErrorHelper.hpp>
 #include <Window.hpp>
 
-bool Window::m_didInit = false;
-
 Window::Window(const std::string_view& windowName) {
-	if (!m_didInit)
-		glfwInit();
 	glfwWindowHint(GLFW_STICKY_KEYS, GLFW_TRUE);
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	const GLFWvidmode* primaryMonitorVidmode = glfwGetVideoMode(glfwGetPrimaryMonitor());
@@ -18,8 +14,6 @@ Window::Window(const std::string_view& windowName) {
 }
 
 Window::Window(const std::string_view& windowName, size_t windowWidth, size_t windowHeight) {
-	if (!m_didInit)
-		glfwInit();
 	glfwWindowHint(GLFW_STICKY_KEYS, GLFW_TRUE);
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	m_window = glfwCreateWindow(static_cast<int>(windowWidth), static_cast<int>(windowHeight), windowName.data(),

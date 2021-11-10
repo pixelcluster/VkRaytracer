@@ -83,9 +83,9 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 															  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
 													 .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
 	VkBufferCreateInfo scratchBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-												   .size = batchData.scratchBuffer.dataSize *
-														   frameInFlightCount,
-												   .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+												   .size = batchData.scratchBuffer.dataSize * frameInFlightCount,
+												   .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+															VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 												   .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
 
 	BufferAllocationRequirements structureBufferRequirements;
@@ -97,24 +97,28 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 				  scratchBufferRequirements, mergedAllocationSize);
 
 	if (mergedAllocationSize > 0) {
+		VkMemoryAllocateFlagsInfo flagsInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+												.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT };
+
 		VkMemoryPropertyFlags requiredFlags = 0;
 		requiredFlags |=
-			structureBufferRequirements.makeDedicatedAllocation ? 0 : structureBufferRequirements.memoryTypeBits;
+			structureBufferRequirements.makeDedicatedAllocation ? ~0U : structureBufferRequirements.memoryTypeBits;
 
-		VkMemoryAllocateInfo memoryAllocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-													.allocationSize = mergedAllocationSize,
-													.memoryTypeIndex = device.findBestMemoryIndex(
-														requiredFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0) };
+		VkMemoryAllocateInfo memoryAllocateInfo = {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+			.pNext = scratchBufferRequirements.makeDedicatedAllocation ? nullptr : &flagsInfo,
+			.allocationSize = mergedAllocationSize,
+			.memoryTypeIndex = device.findBestMemoryIndex(0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, ~requiredFlags)
+		};
 		verifyResult(vkAllocateMemory(device.device(), &memoryAllocateInfo, nullptr, &batchData.sharedStructureMemory));
 
 		VkDeviceSize mergedMemoryOffset = 0;
 		if (!structureBufferRequirements.makeDedicatedAllocation)
 			bindDataBuffer(device, batchData.structureBuffer, batchData.sharedStructureMemory,
-						   structureBufferRequirements,
-						   mergedMemoryOffset);
+						   structureBufferRequirements, mergedMemoryOffset);
 		if (!scratchBufferRequirements.makeDedicatedAllocation)
-			bindDataBuffer(device, batchData.scratchBuffer, batchData.sharedStructureMemory,
-						   scratchBufferRequirements, mergedMemoryOffset);
+			bindDataBuffer(device, batchData.scratchBuffer, batchData.sharedStructureMemory, scratchBufferRequirements,
+						   mergedMemoryOffset);
 	}
 
 	for (size_t i = 0; i < accelerationStructures.size(); ++i) {
@@ -125,7 +129,8 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 			.size = accelerationStructures[i].accelerationStructureSize,
 			.type = initInfos[i].type
 		};
-		verifyResult(vkCreateAccelerationStructureKHR(device.device(), &createInfo, nullptr, &accelerationStructures[i].structure));
+		verifyResult(vkCreateAccelerationStructureKHR(device.device(), &createInfo, nullptr,
+													  &accelerationStructures[i].structure));
 	}
 
 	batchData.structures = std::move(accelerationStructures);
