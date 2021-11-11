@@ -1,6 +1,7 @@
 #include <ErrorHelper.hpp>
 #include <Raytracer.hpp>
 #include <volk.h>
+#include <cstring>
 
 HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount)
 	: m_device(windowWidth, windowHeight, true) {
@@ -24,7 +25,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 											  .sType =
 												  VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
 											  .arrayOfPointers = VK_FALSE } } } } },
-		  .maxPrimitiveCount = sphereCount,
+		  .maxPrimitiveCount = static_cast<uint32_t>(sphereCount),
 		  .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR }
 	};
 

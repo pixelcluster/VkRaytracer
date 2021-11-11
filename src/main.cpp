@@ -1,6 +1,7 @@
 #include <ErrorHelper.hpp>
 #include <Raytracer.hpp>
 #include <volk.h>
+#include <cmath>
 
 int main() {
 	verifyResult(volkInitialize());
