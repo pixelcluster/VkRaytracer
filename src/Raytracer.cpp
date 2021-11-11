@@ -24,7 +24,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 											  .sType =
 												  VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
 											  .arrayOfPointers = VK_FALSE } } } } },
-		  .maxPrimitiveCount = 1,
+		  .maxPrimitiveCount = sphereCount,
 		  .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR }
 	};
 
@@ -196,8 +196,9 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 		return !m_device.window().shouldWindowClose();
 	}
 
-	void* mappedFrameSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
-													   m_stagingBuffer.dataSize * frameData.frameIndex);
+	void* mappedFrameSection =
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
+								m_stagingBuffer.dataSize * frameData.frameIndex + sizeof(VkAabbPositionsKHR));
 	std::vector<VkAccelerationStructureInstanceKHR> instances =
 		std::vector<VkAccelerationStructureInstanceKHR>(spheres.size());
 	for (size_t i = 0; i < spheres.size(); ++i) {
@@ -234,7 +235,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 		.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
 		.geometry = { .aabbs = { VkAccelerationStructureGeometryAabbsDataKHR{
 						  .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
-						  .data = m_accelerationStructureDataDeviceAddress,
+						  .data = m_accelerationStructureDataDeviceAddress +
+								  m_accelerationStructureDataBuffer.dataSize * frameData.frameIndex,
 						  .stride = sizeof(VkAabbPositionsKHR) } } }
 	};
 
@@ -260,6 +262,55 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 
 	vkCmdBuildAccelerationStructuresKHR(frameData.commandBuffer, 1, &blasAccelerationStructureBuildInfo,
 										&ptrBLASRangeInfo);
+
+	VkBufferMemoryBarrier buildMemoryBarrier = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+		.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		.srcQueueFamilyIndex = m_device.queueFamilyIndex(),
+		.dstQueueFamilyIndex = m_device.queueFamilyIndex(),
+		.buffer = m_structureData.structureBuffer.buffer,
+		.offset = m_structureData.structures[m_blasIndex].structureBufferOffset,
+		.size = m_structureData.structures[m_blasIndex].accelerationStructureSize
+	};
+
+	vkCmdPipelineBarrier(frameData.commandBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 1, &copyMemoryBarrier,
+						 0, nullptr);
+
+	VkAccelerationStructureGeometryKHR tlasGeometry = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+		.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
+		.geometry = { .instances = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
+									 .arrayOfPointers = VK_FALSE,
+									 .data = m_accelerationStructureDataDeviceAddress +
+											 m_accelerationStructureDataBuffer.dataSize * frameData.frameIndex +
+											 sizeof(VkAabbPositionsKHR) } }
+	};
+
+	VkAccelerationStructureBuildGeometryInfoKHR tlasAccelerationStructureBuildInfo = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
+				 VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+		.mode = m_hasBuiltAccelerationStructure ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR
+												: VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+		.srcAccelerationStructure =
+			m_hasBuiltAccelerationStructure ? m_structureData.structures[m_tlasIndex].structure : VK_NULL_HANDLE,
+		.dstAccelerationStructure = m_structureData.structures[m_tlasIndex].structure,
+		.geometryCount = 1,
+		.pGeometries = &tlasGeometry,
+		.scratchData = m_scratchBufferBaseDeviceAddress +
+					   (m_structureData.scratchBuffer.dataSize * frameData.frameIndex) +
+					   m_structureData.structures[m_tlasIndex].scratchBufferBaseOffset
+	};
+
+	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = { .primitiveCount =
+																   static_cast<uint32_t>(spheres.size()) };
+	VkAccelerationStructureBuildRangeInfoKHR* ptrTLASRangeInfo = &tlasRangeInfo;
+
+	vkCmdBuildAccelerationStructuresKHR(frameData.commandBuffer, 1, &tlasAccelerationStructureBuildInfo,
+										&ptrTLASRangeInfo);
 
 	VkImageSubresourceRange imageRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 										   .baseMipLevel = 0,
