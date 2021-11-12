@@ -1,0 +1,30 @@
+#version 450 core
+
+#extension GL_EXT_ray_tracing : require
+
+layout(std430, set = 1, binding = 0) buffer SphereBuffer {
+	vec4 colors[];
+};
+
+layout(set = 0, binding = 0) accelerationStructureEXT tlasStructure;
+
+layout(std430, location = 0) rayPayloadEXT payload {
+	vec4 color;
+	uint recursionDepth;
+};
+
+void main() {
+	if(recursionDepth++ < 8 && color.a < 0.99f) {
+		vec4 objectHitNormal = normalize(gl_ObjectRayOriginEXT + gl_HitTEXT * gl_ObjectRayDirection);
+		vce4 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirection;
+		traceRayEXT(tlasStructure, 0, 0xFFFFFFFF, 0, 0.1, hitPoint, 0, reflect(gl_WorldRayDirection, objectHitNormal), 999999999.0f, 0);
+	}
+	else {
+		if(recursionDepth == 8) {
+			color = vec4(colors[gl_InstanceID].rgb, 1.0f);
+		}
+		else {
+			color = vec4(mix(color.rgb, colors[gl_InstanceID].rgb, colors[gl_InstanceID].a), 1.0f);
+		}
+	}
+}

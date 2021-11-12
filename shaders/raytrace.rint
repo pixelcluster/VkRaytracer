@@ -1,0 +1,11 @@
+#version 450 core
+
+void main() {
+	float radius = 0.5 * vec3(gl_ObjectToWorldEXT[0][0], gl_ObjectToWorldEXT[1][1], gl_ObjectToWorldEXT[2][2]);
+	float discriminant = pow(dot(gl_ObjectRayDirectionEXT, gl_ObjectRayOriginEXT), 2) - dot(gl_ObjectRayOrigin) - radius * radius;
+
+	if(discriminant >= 0.0) {
+		float tDot = dot(gl_ObjectRayDirectionEXT, gl_ObjectRayOriginEXT);
+		reportIntersectionEXT(min(-tDot + sqrt(discriminant), -tDot - sqrt(discriminant), gl_HitKindFrontFacingTriangleEXT);
+	}
+}
