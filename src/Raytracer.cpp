@@ -333,17 +333,17 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	// clang-format off
 	// vertices
 	float vertices[4][3] = {
-		{ 50000.0f, 0.0f,  50000.0f},
-		{ 50000.0f, 0.0f, -50000.0f},
-		{-50000.0f, 0.0f,  50000.0f},
-		{-50000.0f, 0.0f, -50000.0f}
+		{ 5000.0f, 0.0f,  5000.0f},
+		{ 5000.0f, 0.0f, -50.0f},
+		{-50.0f, 0.0f,  5000.0f},
+		{-50.0f, 0.0f, -50.0f}
 	};
 	std::memcpy(triangleVertexDataPointer, vertices, m_vertexDataSize);
 	// clang-format on
 
 	void* triangleIndexDataPointer =
-		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(stagingBufferPositionsPointer) + m_vertexDataSize);
-	uint16_t indices[6] = { 3, 2, 0, 3, 1, 2 };
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(triangleVertexDataPointer) + m_vertexDataSize);
+	uint16_t indices[6] = { 3, 2, 0, 1, 3, 0 };
 	std::memcpy(triangleIndexDataPointer, indices, m_indexDataSize);
 
 	void* triangleNormalsDataPointer =
