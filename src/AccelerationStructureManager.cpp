@@ -24,6 +24,8 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 		VkAccelerationStructureBuildGeometryInfoKHR geometryInfo = {
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			.type = initInfos[i].type,
+			.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
+					 VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
 			.geometryCount = static_cast<uint32_t>(initInfos[i].geometries.size()),
 			.pGeometries = initInfos[i].geometries.data()
 		};
@@ -39,15 +41,11 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 		// Calculate buffer sizes from acceleration structure sizes + alignment from padding
 		// Buffer memory layout (applies to both scratch buffers and acceleration structure storage):
 		//---Start of buffer----
-		//- BLAS 1
+		//- AS 1
 		//- padding to fit alignment, if necessary
-		//- BLAS 2
+		//- AS 2
 		//- padding
-		//- BLAS ...
-		//- padding
-		//- BLAS N
-		//- padding
-		//- TLAS
+		//- ...
 		//----End of buffer----
 
 		accelerationStructures[i].structureBufferOffset = accelerationStructureBufferSize;
@@ -69,8 +67,6 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 				structureProperties.minAccelerationStructureScratchOffsetAlignment - scratchBufferPaddingRemainder;
 		}
 	}
-	batchData.structureBuffer.dataSize = accelerationStructureBufferSize;
-	batchData.scratchBuffer.dataSize = scratchBufferSize;
 
 	// Create and bind buffers (to dedicated allocations if needed)
 
@@ -78,12 +74,11 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 	VkDeviceSize stagingAllocationSize = 0;
 
 	VkBufferCreateInfo structureBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-													 .size = batchData.structureBuffer.dataSize,
-													 .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-															  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+													 .size = accelerationStructureBufferSize,
+													 .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
 													 .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
 	VkBufferCreateInfo scratchBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-												   .size = batchData.scratchBuffer.dataSize * frameInFlightCount,
+												   .size = scratchBufferSize,
 												   .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
 															VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 												   .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
@@ -131,7 +126,22 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 		};
 		verifyResult(vkCreateAccelerationStructureKHR(device.device(), &createInfo, nullptr,
 													  &accelerationStructures[i].structure));
+
+		VkAccelerationStructureDeviceAddressInfoKHR blasDeviceAddressInfo = {
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+			.accelerationStructure = accelerationStructures[i].structure
+		};
+
+		accelerationStructures[i].deviceAddress =
+			vkGetAccelerationStructureDeviceAddressKHR(device.device(), &blasDeviceAddressInfo);
 	}
+
+	// Retrieve needed buffer device addresses
+	VkBufferDeviceAddressInfo deviceAddressInfo;
+	deviceAddressInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+						  .buffer = batchData.scratchBuffer.buffer };
+
+	batchData.scratchBufferDeviceAddress = vkGetBufferDeviceAddress(device.device(), &deviceAddressInfo);
 
 	batchData.structures = std::move(accelerationStructures);
 	return batchData;
@@ -147,7 +157,7 @@ void AccelerationStructureManager::addDataBuffer(RayTracingDevice& device, const
 
 	targetRequirements = device.requirements(targetAllocation.buffer);
 	if (targetRequirements.makeDedicatedAllocation)
-		device.allocateDedicated(targetAllocation, targetRequirements.size, targetRequirements.memoryTypeBits, 0, 0);
+		allocateDedicated(device, targetAllocation, targetRequirements.size, targetRequirements.memoryTypeBits, 0, 0);
 	else {
 		if (targetRequirements.alignment) {
 			size_t alignmentRemainder = mergedMemorySize % targetRequirements.alignment;

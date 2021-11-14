@@ -28,6 +28,8 @@ class Window {
 
 	bool shouldWindowClose() const;
 
+	bool keyPressed(int keyCode) const { return glfwGetKey(m_window, keyCode); }
+
   private:
 
 	size_t m_width, m_height;

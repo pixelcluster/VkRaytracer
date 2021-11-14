@@ -170,8 +170,7 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		.bufferDeviceAddress = VK_TRUE
 	};
 	VkPhysicalDeviceFeatures2 features = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-										   .pNext =
-											   enableHardwareRaytracing ? &deviceAddressFeatures : nullptr};
+										   .pNext = enableHardwareRaytracing ? &deviceAddressFeatures : nullptr };
 
 	std::vector<const char*> deviceExtensionNames;
 	if (enableHardwareRaytracing) {
@@ -183,9 +182,21 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		deviceExtensionNames.reserve(1);
 	}
 	deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
+	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+
+	VkDeviceDiagnosticsConfigFlagsNV aftermathFlags =
+		VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_RESOURCE_TRACKING_BIT_NV |	   // Enable tracking of resources.
+		VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_AUTOMATIC_CHECKPOINTS_BIT_NV | // Capture call stacks for all draw calls,
+																		   // compute dispatches, and resource copies.
+		VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_SHADER_DEBUG_INFO_BIT_NV;	   // Generate debug information for shaders.
+	VkDeviceDiagnosticsConfigCreateInfoNV aftermathInfo = {};
+	aftermathInfo.sType = VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV;
+	aftermathInfo.pNext = &features;
+	aftermathInfo.flags = aftermathFlags;
 
 	VkDeviceCreateInfo deviceCreateInfo = { .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-											.pNext = &features,
+											.pNext = &aftermathInfo,
 											.queueCreateInfoCount = 1,
 											.pQueueCreateInfos = &deviceQueueCreateInfo,
 											.enabledLayerCount = static_cast<uint32_t>(instanceLayerNames.size()),
@@ -387,12 +398,13 @@ FrameData RayTracingDevice::beginFrame() {
 
 	m_isSwapchainGood = true;
 
-	verifyResult(vkWaitForFences(m_device, 1, &m_perFrameData[m_currentFrameIndex].fence, VK_TRUE, 100000000));
+	verifyResult(vkWaitForFences(m_device, 1, &m_perFrameData[m_currentFrameIndex].fence, VK_TRUE, UINT64_MAX));
 	verifyResult(vkResetFences(m_device, 1, &m_perFrameData[m_currentFrameIndex].fence));
 
 	verifyResult(vkResetCommandPool(m_device, m_perFrameData[m_currentFrameIndex].pool, 0));
 
-	VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+	VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+										   .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 	verifyResult(vkBeginCommandBuffer(m_perFrameData[m_currentFrameIndex].commandBuffer, &beginInfo));
 
 	return FrameData{ .commandBuffer = m_perFrameData[m_currentFrameIndex].commandBuffer,
@@ -430,8 +442,6 @@ bool RayTracingDevice::endFrame() {
 
 	verifyResult(vkQueuePresentKHR(m_queue, &presentInfo));
 	verifyResult(presentResult);
-
-	++m_currentFrameIndex %= frameInFlightCount;
 
 	if (presentResult == VK_SUBOPTIMAL_KHR) {
 		m_swapchain =
@@ -494,21 +504,6 @@ BufferAllocationRequirements RayTracingDevice::requirements(VkBuffer buffer) {
 										 .memoryTypeBits = memoryRequirements.memoryRequirements.memoryTypeBits,
 										 .makeDedicatedAllocation = dedicatedRequirements.requiresDedicatedAllocation ||
 																	dedicatedRequirements.prefersDedicatedAllocation };
-}
-
-void RayTracingDevice::allocateDedicated(BufferAllocation& allocation, VkDeviceSize requiredSize,
-										 VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred,
-										 VkMemoryPropertyFlags forbidden) {
-	VkMemoryDedicatedAllocateInfo dedicatedAllocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
-															.buffer = allocation.buffer };
-	VkMemoryAllocateInfo allocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-										  .pNext = &dedicatedAllocateInfo,
-										  .allocationSize = requiredSize,
-										  .memoryTypeIndex = findBestMemoryIndex(required, preferred, forbidden) };
-
-	vkAllocateMemory(m_device, &allocateInfo, nullptr, &allocation.dedicatedMemory);
-
-	vkBindBufferMemory(m_device, allocation.buffer, allocation.dedicatedMemory, 0);
 }
 
 void RayTracingDevice::waitAllFences() const {

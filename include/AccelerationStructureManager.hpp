@@ -1,18 +1,21 @@
 #pragma once
 
 #include <RayTracingDevice.hpp>
+#include <BufferHelper.h>
 
 struct AccelerationStructureData {
 	VkAccelerationStructureKHR structure;
 	VkDeviceSize structureBufferOffset;
 	VkDeviceSize scratchBufferBaseOffset;
 	VkDeviceSize accelerationStructureSize;
+	VkDeviceAddress deviceAddress;
 };
 
 struct AccelerationStructureBatchData {
 	BufferAllocation structureBuffer;
-	BufferAllocation scratchBuffer; //contains mirrors for each frame in flight
+	BufferAllocation scratchBuffer;
 	VkDeviceMemory sharedStructureMemory;
+	VkDeviceAddress scratchBufferDeviceAddress;
 	std::vector<AccelerationStructureData> structures;
 };
 

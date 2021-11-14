@@ -17,12 +17,6 @@ struct FrameData {
 	uint32_t frameIndex = 0;
 };
 
-struct BufferAllocation {
-	VkBuffer buffer;
-	VkDeviceMemory dedicatedMemory = VK_NULL_HANDLE;
-	VkDeviceSize dataSize; // The size of the data section. May not be equal to the buffer size if the buffer contains
-						   // multiple mirrors.
-};
 
 struct BufferAllocationRequirements {
 	VkDeviceSize size, alignment;
@@ -56,9 +50,6 @@ class RayTracingDevice {
 								 VkMemoryPropertyFlags forbidden);
 
 	BufferAllocationRequirements requirements(VkBuffer buffer);
-
-	void allocateDedicated(BufferAllocation& allocation, VkDeviceSize requiredSize, VkMemoryPropertyFlags required,
-						   VkMemoryPropertyFlags preferred, VkMemoryPropertyFlags forbidden);
 
 	void waitAllFences() const;
 

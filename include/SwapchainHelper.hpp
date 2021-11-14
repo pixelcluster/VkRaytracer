@@ -28,7 +28,7 @@ VkSwapchainKHR createSwapchain(VkPhysicalDevice physicalDevice, VkDevice device,
 
 	VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 	if (std::find(presentModes.begin(), presentModes.end(), VK_PRESENT_MODE_MAILBOX_KHR) != presentModes.end()) {
-		presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+		//presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
 	}
 
 	VkSwapchainCreateInfoKHR swapchainCreateInfo = { .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
