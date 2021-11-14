@@ -157,10 +157,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 
 	// Determine size and alignment of staging/data buffers
 
-	size_t vertexDataSize = sizeof(float) * 3 * m_triangleUniqueVertexCount;
-	size_t indexDataSize = sizeof(uint16_t) * m_triangleUniqueIndexCount;
-	size_t transformDataSize = sizeof(VkTransformMatrixKHR) * m_triangleTransformCount;
-	size_t triangleDataSize = vertexDataSize + indexDataSize + transformDataSize;
+	size_t triangleDataSize = m_vertexDataSize + m_indexDataSize + m_transformDataSize;
 	size_t triangleDataOffset = sizeof(VkAabbPositionsKHR);
 
 	m_stagingFrameDataSize = (sizeof(VkAccelerationStructureInstanceKHR) + sizeof(float) * 4) * objectCount;
@@ -769,7 +766,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	return m_device.endFrame();
 }
 
-VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructBLASGeometryInfo(VkBuildAccelerationStructureModeKHR mode, VkAccelerationStructureGeometryKHR& targetGeometry) {
+VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructBLASGeometryInfo(
+	VkBuildAccelerationStructureModeKHR mode, VkAccelerationStructureGeometryKHR& targetGeometry) {
 	targetGeometry = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
 					   .geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
 					   .geometry = { .aabbs = { VkAccelerationStructureGeometryAabbsDataKHR{
@@ -777,6 +775,38 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructBL
 										 .data = m_accelerationStructureDataDeviceAddress +
 												 m_accelerationStructureFrameDataSize * frameInFlightCount,
 										 .stride = sizeof(VkAabbPositionsKHR) } } } };
+
+	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			 .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+			 .flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
+					  VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+			 .mode = mode,
+			 .srcAccelerationStructure = mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR
+											 ? m_blasStructureData.structures[m_sphereBLASIndex].structure
+											 : VK_NULL_HANDLE,
+			 .dstAccelerationStructure = m_blasStructureData.structures[m_sphereBLASIndex].structure,
+			 .geometryCount = 1,
+			 .pGeometries = &targetGeometry,
+			 .scratchData = m_blasStructureData.scratchBufferDeviceAddress +
+							m_blasStructureData.structures[m_sphereBLASIndex].scratchBufferBaseOffset };
+}
+
+VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructPlaneBLASGeometryInfo(
+	VkBuildAccelerationStructureModeKHR mode, VkAccelerationStructureGeometryKHR& targetGeometry) {
+	targetGeometry = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+					   .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
+					   .geometry = { .triangles = { VkAccelerationStructureGeometryTrianglesDataKHR{
+										 .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
+										 .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
+										 .vertexData = m_accelerationStructureDataDeviceAddress +
+													   m_accelerationStructureFrameDataSize * frameInFlightCount +
+													   sizeof(VkAabbPositionsKHR),
+										 .vertexStride = 3 * sizeof(float),
+										 .maxVertex = 3,
+										 .indexType = VK_INDEX_TYPE_UINT16,
+										 .indexData = m_accelerationStructureDataDeviceAddress +
+													  m_accelerationStructureFrameDataSize * frameInFlightCount +
+													  sizeof(VkAabbPositionsKHR) + m_vertexDataSize } } } };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			 .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,

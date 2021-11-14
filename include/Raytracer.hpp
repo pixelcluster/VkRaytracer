@@ -21,6 +21,8 @@ class HardwareSphereRaytracer {
   private:
 	VkAccelerationStructureBuildGeometryInfoKHR constructBLASGeometryInfo(
 		VkBuildAccelerationStructureModeKHR mode, VkAccelerationStructureGeometryKHR& targetGeometry);
+	VkAccelerationStructureBuildGeometryInfoKHR constructPlaneBLASGeometryInfo(
+		VkBuildAccelerationStructureModeKHR mode, VkAccelerationStructureGeometryKHR& targetGeometry);
 	VkAccelerationStructureBuildGeometryInfoKHR constructTLASGeometryInfo(
 		uint32_t frameIndex, VkBuildAccelerationStructureModeKHR mode,
 		VkAccelerationStructureGeometryKHR& targetGeometry);
@@ -36,6 +38,11 @@ class HardwareSphereRaytracer {
 	static constexpr size_t m_triangleUniqueNormalCount = 2;
 	static constexpr size_t m_triangleUniqueIndexCount = 6;
 	static constexpr size_t m_triangleTransformCount = 0;
+
+	static constexpr size_t m_vertexDataSize = sizeof(float) * 3 * m_triangleUniqueVertexCount;
+	static constexpr size_t m_indexDataSize = sizeof(uint16_t) * m_triangleUniqueIndexCount;
+	static constexpr size_t m_transformDataSize = sizeof(VkTransformMatrixKHR) * m_triangleTransformCount;
+	static constexpr size_t m_normalDataSize = sizeof(float) * 4 * m_triangleTransformCount;
 
 	struct PushConstantData {
 		float worldOffset[3];
