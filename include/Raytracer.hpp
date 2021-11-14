@@ -31,7 +31,7 @@ class HardwareSphereRaytracer {
 	void setGeometryTLASBatchNames(size_t frameIndex);
 
 	static constexpr size_t m_sphereBLASIndex = 0;
-	static constexpr size_t m_triangleBLASIndex = 1;
+	static constexpr size_t m_planeBLASIndex = 1;
 
 	static constexpr size_t m_triangleObjectCount = 1;
 	static constexpr size_t m_triangleUniqueVertexCount = 4;
@@ -42,7 +42,7 @@ class HardwareSphereRaytracer {
 	static constexpr size_t m_vertexDataSize = sizeof(float) * 3 * m_triangleUniqueVertexCount;
 	static constexpr size_t m_indexDataSize = sizeof(uint16_t) * m_triangleUniqueIndexCount;
 	static constexpr size_t m_transformDataSize = sizeof(VkTransformMatrixKHR) * m_triangleTransformCount;
-	static constexpr size_t m_normalDataSize = sizeof(float) * 4 * m_triangleTransformCount;
+	static constexpr size_t m_normalDataSize = sizeof(float) * 4 * m_triangleUniqueNormalCount;
 
 	struct PushConstantData {
 		float worldOffset[3];
@@ -63,9 +63,10 @@ class HardwareSphereRaytracer {
 
 	VkDeviceAddress m_accelerationStructureDataDeviceAddress;
 
-	VkStridedDeviceAddressRegionKHR m_sphereRaygenShaderBindingTable;
+	VkStridedDeviceAddressRegionKHR m_raygenShaderBindingTable;
 	VkStridedDeviceAddressRegionKHR m_sphereHitShaderBindingTable;
-	VkStridedDeviceAddressRegionKHR m_sphereMissShaderBindingTable;
+	VkStridedDeviceAddressRegionKHR m_triangleHitShaderBindingTable;
+	VkStridedDeviceAddressRegionKHR m_missShaderBindingTable;
 
 	VkPipeline m_pipeline;
 	VkPipelineLayout m_pipelineLayout;
