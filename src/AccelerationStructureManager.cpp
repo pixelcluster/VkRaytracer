@@ -108,6 +108,8 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 		verifyResult(vkAllocateMemory(device.device(), &memoryAllocateInfo, nullptr, &batchData.sharedStructureMemory));
 
 		VkDeviceSize mergedMemoryOffset = 0;
+		scratchBufferRequirements.alignment = std::lcm(
+			scratchBufferRequirements.alignment, structureProperties.minAccelerationStructureScratchOffsetAlignment);
 		if (!structureBufferRequirements.makeDedicatedAllocation)
 			bindDataBuffer(device, batchData.structureBuffer, batchData.sharedStructureMemory,
 						   structureBufferRequirements, mergedMemoryOffset);
