@@ -333,10 +333,10 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	// clang-format off
 	// vertices
 	float vertices[4][3] = {
-		{ 5000.0f, 0.0f,  5000.0f},
-		{ 5000.0f, 0.0f, -50.0f},
-		{-50.0f, 0.0f,  5000.0f},
-		{-50.0f, 0.0f, -50.0f}
+		{ 2500.0f, 0.0f,  2500.0f},
+		{ 2500.0f, 0.0f,  -5.0f},
+		{ -5.0f,   0.0f,  2500.0f},
+		{ -5.0f,   0.0f,  -5.0f}
 	};
 	std::memcpy(triangleVertexDataPointer, vertices, m_vertexDataSize);
 	// clang-format on
@@ -352,7 +352,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	std::memcpy(triangleNormalsDataPointer, normals, m_normalDataSize);
 
 	void* shaderBindingTablePointer =
-		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(triangleVertexDataPointer) + triangleDataSize);
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(triangleVertexDataPointer) + triangleDataSize + m_normalDataSize);
 	vkGetRayTracingShaderGroupHandlesKHR(m_device.device(), m_pipeline, 0, 4, shaderGroupHandleSize * 4,
 										 shaderBindingTablePointer);
 
@@ -503,27 +503,27 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 					static_cast<uint32_t>(bufferCopyRegions.size()), bufferCopyRegions.data());
 
 	VkBufferCopy shaderBindingTableCopies[6] = {
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize,
+		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize,
 		  .dstOffset = 0,
 		  .size = shaderGroupHandleSize },
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize,
+		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize,
 		  .dstOffset = shaderGroupHandleSizeAligned,
 		  .size = shaderGroupHandleSize },
 
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize +
+		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize +
 					   shaderGroupHandleSize,
 		  .dstOffset = shaderGroupHandleSizeAligned * 2,
 		  .size = shaderGroupHandleSize },
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize +
+		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize +
 					   shaderGroupHandleSize * 2,
 		  .dstOffset = shaderGroupHandleSizeAligned * 3,
 		  .size = shaderGroupHandleSize },
 
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize +
+		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize +
 					   shaderGroupHandleSize * 3,
 		  .dstOffset = shaderGroupHandleSizeAligned * 4,
 		  .size = shaderGroupHandleSize },
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize +
+		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize +
 					   shaderGroupHandleSize * 3,
 		  .dstOffset = shaderGroupHandleSizeAligned * 5,
 		  .size = shaderGroupHandleSize }
@@ -531,7 +531,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	vkCmdCopyBuffer(submitCommandBuffer, m_stagingBuffer.buffer, m_shaderBindingTableBuffer.buffer, 6,
 					shaderBindingTableCopies);
 
-	VkBufferCopy normalDataCopy = { .srcOffset = m_stagingFrameDataSize * frameInFlightCount + m_vertexDataSize +
+	VkBufferCopy normalDataCopy = { .srcOffset = m_stagingFrameDataSize * frameInFlightCount +
+												 sizeof(VkAabbPositionsKHR) + m_vertexDataSize +
 												 m_indexDataSize,
 									.dstOffset = m_objectFrameDataSize * frameInFlightCount,
 									.size = m_normalDataSize };
@@ -550,7 +551,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 1, &copyMemoryBarrier,
 						 0, nullptr);
 
-	vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(6));
+	//vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(6));
 
 	vkCmdBuildAccelerationStructuresKHR(submitCommandBuffer, static_cast<uint32_t>(blasBuildInfos.size()),
 										blasBuildInfos.data(), ptrBLASRangeInfo.data());
@@ -566,7 +567,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr,
 						 static_cast<uint32_t>(tlasBuildBarriers.size()), tlasBuildBarriers.data(), 0, nullptr);
 
-	vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(7));
+	//vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(7));
 
 	VkBufferMemoryBarrier normalCopyBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
 												.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -580,7 +581,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 1, &normalCopyBarrier, 0,
 						 nullptr);
 
-	vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(8));
+	//vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(8));
 
 	verifyResult(vkEndCommandBuffer(submitCommandBuffer));
 
@@ -717,17 +718,17 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 
 	vkUpdateDescriptorSets(m_device.device(), 3, writes, 0, nullptr);
 
-	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(0));
+	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(0));
 
 	// Write updated data
 
 	void* mappedFrameSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
 													   m_stagingFrameDataSize * frameData.frameIndex);
 	void* sphereDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mappedFrameSection) +
-													  (spheres.size()+ m_triangleObjectCount) * sizeof(VkAccelerationStructureInstanceKHR));
+													  (spheres.size() + m_triangleObjectCount) * sizeof(VkAccelerationStructureInstanceKHR));
 	std::vector<VkAccelerationStructureInstanceKHR> instances =
 		std::vector<VkAccelerationStructureInstanceKHR>(spheres.size() + m_triangleObjectCount);
-	std::vector<float> sphereColors = std::vector<float>(spheres.size() * 4);
+	std::vector<float> objectColors = std::vector<float>((spheres.size() + m_triangleObjectCount) * 4);
 	for (size_t i = 0; i < spheres.size(); ++i) {
 		instances[i] = { .transform = { .matrix = { { 2 * spheres[i].radius, 0.0f, 0.0f, spheres[i].position[0] },
 													{ 0.0f, 2 * spheres[i].radius, 0.0f, spheres[i].position[1] },
@@ -736,23 +737,27 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 						 .mask = 0xFFFFFFFF,
 						 .accelerationStructureReference =
 							 m_blasStructureData.structures[m_sphereBLASIndex].deviceAddress };
-		sphereColors[i * 4 + 0] = spheres[i].color[0];
-		sphereColors[i * 4 + 1] = spheres[i].color[1];
-		sphereColors[i * 4 + 2] = spheres[i].color[2];
-		sphereColors[i * 4 + 3] = spheres[i].color[3];
+		objectColors[i * 4 + 0] = spheres[i].color[0];
+		objectColors[i * 4 + 1] = spheres[i].color[1];
+		objectColors[i * 4 + 2] = spheres[i].color[2];
+		objectColors[i * 4 + 3] = spheres[i].color[3];
 	}
-	for (size_t j = 0; j < m_triangleObjectCount; ++j) {
-		instances[spheres.size() + j] = { .transform = { .matrix = { { 1.0f, 0.0f, 0.0f, 0.0f },
+	for (size_t i = 0; i < m_triangleObjectCount; ++i) {
+		instances[spheres.size() + i] = { .transform = { .matrix = { { 1.0f, 0.0f, 0.0f, 0.0f },
 																	 { 0.0f, 1.0f, 0.0f, 0.0f },
 																	 { 0.0f, 0.0f, 1.0f, 0.0f } } },
-										  .instanceCustomIndex = static_cast<uint32_t>(j),
+										  .instanceCustomIndex = static_cast<uint32_t>(i),
 										  .mask = 0xFFFFFFFF,
 										  .instanceShaderBindingTableRecordOffset = 1,
 										  .accelerationStructureReference =
 											  m_blasStructureData.structures[m_planeBLASIndex].deviceAddress };
+		objectColors[(spheres.size() + i) * 4 + 0] = 0.0f;
+		objectColors[(spheres.size() + i) * 4 + 1] = 0.0f;
+		objectColors[(spheres.size() + i) * 4 + 2] = 0.0f;
+		objectColors[(spheres.size() + i) * 4 + 3] = 0.0f;
 	}
 	std::memcpy(mappedFrameSection, instances.data(), instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
-	std::memcpy(sphereDataSection, sphereColors.data(), sphereColors.size() * sizeof(float));
+	std::memcpy(sphereDataSection, objectColors.data(), objectColors.size() * sizeof(float));
 
 	VkBufferCopy instanceCopyRegion = { .srcOffset = m_stagingFrameDataSize * frameData.frameIndex,
 										.dstOffset = m_accelerationStructureFrameDataSize * frameData.frameIndex,
@@ -764,11 +769,11 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	VkBufferCopy sphereCopyRegion = { .srcOffset = m_stagingFrameDataSize * frameData.frameIndex +
 												   instances.size() * sizeof(VkAccelerationStructureInstanceKHR),
 									  .dstOffset = m_objectFrameDataSize * frameData.frameIndex,
-									  .size = sphereColors.size() * sizeof(float) };
+									  .size = objectColors.size() * sizeof(float) };
 
 	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_objectDataBuffer.buffer, 1, &sphereCopyRegion);
 
-	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(1));
+	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(1));
 
 	VkBufferMemoryBarrier copyMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
 												.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -783,7 +788,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 1, &copyMemoryBarrier,
 						 0, nullptr);
 
-	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(2));
+	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(2));
 
 	// Build acceleration structures
 
@@ -798,7 +803,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdBuildAccelerationStructuresKHR(frameData.commandBuffer, 1, &tlasAccelerationStructureBuildInfo,
 										&ptrTLASRangeInfo);
 
-	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(3));
+	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(3));
 
 	VkImageSubresourceRange imageRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 										   .baseMipLevel = 0,
@@ -816,14 +821,15 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 												 .image = frameData.swapchainImage,
 												 .subresourceRange = imageRange };
 
-	VkBufferMemoryBarrier sphereDataMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+	VkBufferMemoryBarrier objectDataMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
 													  .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
 													  .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
 													  .srcQueueFamilyIndex = m_device.queueFamilyIndex(),
 													  .dstQueueFamilyIndex = m_device.queueFamilyIndex(),
 													  .buffer = m_objectDataBuffer.buffer,
-													  .offset = m_objectFrameDataSize * frameData.frameIndex,
-													  .size = sphereColors.size() * sizeof(float) };
+													  .offset =
+														  m_objectFrameDataSize * frameData.frameIndex,
+													  .size = objectColors.size() * sizeof(float) };
 
 	VkMemoryBarrier buildMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 										   .srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
@@ -832,7 +838,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdPipelineBarrier(frameData.commandBuffer,
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
 							 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_TRANSFER_BIT,
-						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &buildMemoryBarrier, 0, nullptr, 1,
+						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &buildMemoryBarrier, 1, &objectDataMemoryBarrier, 1,
 						 &memoryBarrierBefore);
 
 	vkCmdBindPipeline(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_pipeline);
@@ -847,7 +853,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdBindDescriptorSets(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_pipelineLayout, 0, 1,
 							&m_descriptorSets[frameData.frameIndex], 0, nullptr);
 
-	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(4));
+	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(4));
 
 	VkStridedDeviceAddressRegionKHR nullRegion = {};
 
@@ -869,7 +875,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 0, nullptr, 1,
 						 &memoryBarrierAfter);
 
-	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(5));
+	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(5));
 
 	return m_device.endFrame();
 }

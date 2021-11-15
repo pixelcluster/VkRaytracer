@@ -84,7 +84,7 @@ class HardwareSphereRaytracer {
 	VkCommandPool m_oneTimeSubmitPool;
 	VkFence m_oneTimeSubmitFence;
 
-	float m_worldPos[3] = { 0.0f, 0.0f, -5.0f };
+	float m_worldPos[3] = { 0.0f, 2.0f, -5.0f };
 	double m_lastTime = 0.0f;
 
 	RayTracingDevice m_device;
