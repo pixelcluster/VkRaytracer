@@ -83,8 +83,9 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 															VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 												   .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
 
-	BufferAllocationRequirements structureBufferRequirements;
-	BufferAllocationRequirements scratchBufferRequirements;
+	BufferAllocationRequirements structureBufferRequirements{};
+	BufferAllocationRequirements scratchBufferRequirements{};
+		scratchBufferRequirements.alignment = structureProperties.minAccelerationStructureScratchOffsetAlignment;
 
 	addDataBuffer(device, structureBufferCreateInfo, 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, batchData.structureBuffer,
 				  structureBufferRequirements, mergedAllocationSize);
@@ -108,8 +109,6 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 		verifyResult(vkAllocateMemory(device.device(), &memoryAllocateInfo, nullptr, &batchData.sharedStructureMemory));
 
 		VkDeviceSize mergedMemoryOffset = 0;
-		scratchBufferRequirements.alignment = std::lcm(
-			scratchBufferRequirements.alignment, structureProperties.minAccelerationStructureScratchOffsetAlignment);
 		if (!structureBufferRequirements.makeDedicatedAllocation)
 			bindDataBuffer(device, batchData.structureBuffer, batchData.sharedStructureMemory,
 						   structureBufferRequirements, mergedMemoryOffset);
@@ -157,10 +156,14 @@ void AccelerationStructureManager::addDataBuffer(RayTracingDevice& device, const
 												 VkDeviceSize& mergedMemorySize) {
 	verifyResult(vkCreateBuffer(device.device(), &info, nullptr, &targetAllocation.buffer));
 
+	VkDeviceSize outsideAlignment = targetRequirements.alignment;
+
 	targetRequirements = device.requirements(targetAllocation.buffer);
 	if (targetRequirements.makeDedicatedAllocation)
 		allocateDedicated(device, targetAllocation, targetRequirements.size, targetRequirements.memoryTypeBits, 0, 0);
 	else {
+		if(outsideAlignment)
+			targetRequirements.alignment = std::lcm(outsideAlignment, targetRequirements.alignment);
 		if (targetRequirements.alignment) {
 			size_t alignmentRemainder = mergedMemorySize % targetRequirements.alignment;
 			if (alignmentRemainder)

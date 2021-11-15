@@ -241,7 +241,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 
 	BufferAllocationBatch stagingBatch = allocateBatch(
 		m_device,
-		{ { .size = m_stagingFrameDataSize * frameInFlightCount + shaderGroupHandleSize * 4 +
+		{ { .size = m_stagingFrameDataSize * frameInFlightCount + shaderGroupHandleSize * 6 +
 					sizeof(VkAabbPositionsKHR) + triangleDataSize,
 			.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			.requiredProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT } },

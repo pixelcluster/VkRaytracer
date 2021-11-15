@@ -354,6 +354,7 @@ bool RayTracingDevice::canRecreateSwapchain() {
 }
 
 FrameData RayTracingDevice::beginFrame() {
+	m_currentImageIndex = -1U;
 	if (m_isSwapchainGood) {
 		m_window.pollEvents();
 	} else {
@@ -363,13 +364,14 @@ FrameData RayTracingDevice::beginFrame() {
 	if (m_window.windowSizeDirty() || !m_isSwapchainGood) {
 		if (!canRecreateSwapchain()) {
 			m_isSwapchainGood = false;
-			return FrameData{};
 		}
 
 		if (!m_isSwapchainGood) {
 			// Swapchain recreation might start working in between the call to waitEvents and canRecreateSwapchain, so
 			// the window size needs to be updated
 			m_window.pollEvents();
+			m_isSwapchainGood = canRecreateSwapchain();
+			return FrameData{};
 		}
 
 		m_swapchain =
@@ -392,6 +394,7 @@ FrameData RayTracingDevice::beginFrame() {
 							{ static_cast<uint32_t>(m_window.width()), static_cast<uint32_t>(m_window.height()) },
 							m_swapchain, enableDebugUtils);
 		createSwapchainResources();
+		return FrameData{};
 	} else if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_isSwapchainGood = false;
 		return FrameData{};
