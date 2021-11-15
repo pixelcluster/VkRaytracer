@@ -192,7 +192,7 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_SHADER_DEBUG_INFO_BIT_NV;	   // Generate debug information for shaders.
 	VkDeviceDiagnosticsConfigCreateInfoNV aftermathInfo = {};
 	aftermathInfo.sType = VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV;
-	//aftermathInfo.pNext = &features;
+	// aftermathInfo.pNext = &features;
 	aftermathInfo.flags = aftermathFlags;
 
 	VkDeviceCreateInfo deviceCreateInfo = { .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -384,6 +384,9 @@ FrameData RayTracingDevice::beginFrame() {
 												   VK_NULL_HANDLE, &m_currentImageIndex);
 
 	if (acquireResult == VK_SUBOPTIMAL_KHR) {
+		// Swapchain recreation might start working in between the call to waitEvents and canRecreateSwapchain, so
+		// the window size needs to be updated
+		m_window.pollEvents();
 		m_swapchain =
 			createSwapchain(m_physicalDevice, m_device, m_surface,
 							{ static_cast<uint32_t>(m_window.width()), static_cast<uint32_t>(m_window.height()) },

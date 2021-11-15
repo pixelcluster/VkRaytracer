@@ -28,8 +28,8 @@ int main() {
 				float y = 2.0f + (j % 2 ? sinf(glfwGetTime() + j * 0.1) : cosf(glfwGetTime() + j * 0.1));
 				spheres[j + i * 50] = Sphere{ .position = { 2.0f * i, -y, 2.0f * j, 1.0f },
 											 .radius = 0.5f,
-											 .color = { fabs(sinf(floatIndex)), fabs(cosf(floatIndex)),
-														fabs(cosf(floatIndex) * sinf(floatIndex)), 0.5f } };
+											 .color = { static_cast<float>(fabs(sinf(floatIndex))), static_cast<float>(fabs(cosf(floatIndex))),
+														static_cast<float>(fabs(cosf(floatIndex) * sinf(floatIndex))), 0.5f } };
 			}
 		}
 	}

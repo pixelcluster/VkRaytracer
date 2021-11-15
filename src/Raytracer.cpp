@@ -4,6 +4,7 @@
 #include <ShaderModuleHelper.hpp>
 #include <cstring>
 #include <numbers>
+#include <cmath>
 #include <volk.h>
 
 HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount)
