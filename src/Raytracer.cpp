@@ -752,9 +752,9 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 										  .instanceShaderBindingTableRecordOffset = 1,
 										  .accelerationStructureReference =
 											  m_blasStructureData.structures[m_planeBLASIndex].deviceAddress };
-		objectColors[(spheres.size() + i) * 4 + 0] = 0.0f;
-		objectColors[(spheres.size() + i) * 4 + 1] = 0.0f;
-		objectColors[(spheres.size() + i) * 4 + 2] = 0.0f;
+		objectColors[(spheres.size() + i) * 4 + 0] = 1.0f;
+		objectColors[(spheres.size() + i) * 4 + 1] = 1.0f;
+		objectColors[(spheres.size() + i) * 4 + 2] = 1.0f;
 		objectColors[(spheres.size() + i) * 4 + 3] = 0.0f;
 	}
 	std::memcpy(mappedFrameSection, instances.data(), instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
