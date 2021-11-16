@@ -9,5 +9,5 @@ layout(location = 0) rayPayloadInEXT payload {
 
 void main() {
 	++recursionDepth;
-	color = vec4(mix(vec3(0.5, 0.6, 0.9), vec3(1.0, 1.0, 1.0), gl_WorldRayDirectionEXT.y), 1.0f);
+	color = vec4(mix(vec3(0.5, 0.6, 0.9), vec3(1.0, 1.0, 1.0), gl_WorldRayDirectionEXT.y) * 6.0f, 1.0f);
 }

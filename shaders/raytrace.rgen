@@ -24,5 +24,5 @@ void main() {
 	payload.color = vec4(0.0f);
 	payload.recursionDepth = 0;
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, worldOffset , 0.0, direction, 999999999.0f, 0);
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), payload.color);
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), payload.color / (payload.color + vec4(1.0f, 1.0f, 1.0f, 0.0f)));
 }
