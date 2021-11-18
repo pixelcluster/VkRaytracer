@@ -14,15 +14,29 @@ layout(rgba8, set = 0, binding = 1) uniform image2D image;
 struct RayPayload {
 	vec4 color;
 	uint recursionDepth;
+
+	uint randomState;
 };
 
 layout(location = 0) rayPayloadEXT RayPayload payload;
 
+void nextRand(inout uint randomState) {
+	randomState = randomState * 246049789 % 268435399;
+	uint c = randomState & 0xE0000000 >> 29;
+	//random xorshift to improve the middle bytes
+	randomState = ((((randomState ^ randomState >> c)) ^ (c << 32 - c)) * 104122896) ^ (c << 7);
+}
+
 void main() {
 	vec2 point = (vec2(gl_LaunchIDEXT.xy) / vec2(gl_LaunchSizeEXT.xy)) * 2.0f.xx - 1.0f.xx;
 	vec3 direction = normalize(vec3(0.0f, 0.0f, 1.0f) + vec3(point * vec2(tanHalfFoV * aspectRatio, tanHalfFoV), 0.0f));
+
 	payload.color = vec4(0.0f);
 	payload.recursionDepth = 0;
+	uint randomSeed = gl_LaunchIDEXT.x + gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x;
+	nextRand(randomSeed);
+	payload.randomState = randomSeed;
+
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, worldOffset , 0.0, direction, 999999999.0f, 0);
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), payload.color / (payload.color + vec4(1.0f, 1.0f, 1.0f, 0.0f)));
 }

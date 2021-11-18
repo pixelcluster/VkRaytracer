@@ -5,6 +5,8 @@
 layout(location = 0) rayPayloadInEXT payload {
 	vec4 color;
 	uint recursionDepth;
+
+	uint randomState;
 };
 
 void main() {

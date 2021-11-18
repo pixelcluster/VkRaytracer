@@ -11,6 +11,8 @@ layout(set = 0, binding = 0) uniform accelerationStructureEXT tlasStructure;
 struct RayPayload {
 	vec4 color;
 	uint recursionDepth;
+
+	uint randomState;
 };
 
 const float eta_i = 1.0f;
