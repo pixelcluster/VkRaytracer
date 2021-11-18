@@ -26,17 +26,16 @@ layout(location = 0) rayPayloadInEXT RayPayload payload;
 uint nextRand() {
 	payload.randomState = payload.randomState * 246049789 % 268435399;
 	uint c = payload.randomState & 0xE0000000 >> 29;
-	//random xorshift to improve the middle bytes
 	payload.randomState = ((((payload.randomState ^ payload.randomState >> c)) ^ (c << 32 - c)) * 104122896) ^ (c << 7);
 	return payload.randomState;
 }
 
 vec3 randVec3() {
-	return vec3(nextRand() / float(4294967295.0f * 2.0f), nextRand() / float(0xFFFFFFFF), nextRand() / float(0xFFFFFFFF));
+	return vec3(nextRand() * uintBitsToFloat(0x2f800004U), nextRand() * uintBitsToFloat(0x2f800004U), nextRand() * uintBitsToFloat(0x2f800004U));
 }
 
 void main() {
-	/*if(payload.recursionDepth++ < 8 && colors[gl_InstanceID].a < 0.99f) {
+	if(payload.recursionDepth++ < 8 && colors[gl_InstanceID].a < 0.99f) {
 		vec3 objectHitNormal = normals[gl_PrimitiveID].xyz;
 		vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
 		vec3 nextRayDir = normalize(reflect(gl_WorldRayDirectionEXT, objectHitNormal));
@@ -61,6 +60,5 @@ void main() {
 	}
 	else {
 		payload.color = vec4(colors[gl_InstanceID].rgb, 1.0f);
-	}*/
-	payload.color = vec4(randVec3(), 1.0f);
+	}
 }

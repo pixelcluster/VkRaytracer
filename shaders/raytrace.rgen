@@ -23,7 +23,6 @@ layout(location = 0) rayPayloadEXT RayPayload payload;
 void nextRand(inout uint randomState) {
 	randomState = randomState * 246049789 % 268435399;
 	uint c = randomState & 0xE0000000 >> 29;
-	//random xorshift to improve the middle bytes
 	randomState = ((((randomState ^ randomState >> c)) ^ (c << 32 - c)) * 104122896) ^ (c << 7);
 }
 
