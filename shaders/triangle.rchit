@@ -11,6 +11,8 @@ layout(std430, set = 0, binding = 3) buffer NormalBuffer {
 
 const float eta_i = 1.0f;
 const float eta_t = 1.22;
+const float alpha_x = 0.78;
+const float alpha_y = 0.78;
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT tlasStructure;
 
@@ -23,6 +25,7 @@ struct RayPayload {
 
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 
+//PCG-RXS-M-XS
 uint nextRand() {
 	payload.randomState = payload.randomState * 246049789 % 268435399;
 	uint c = payload.randomState & 0xE0000000 >> 29;
@@ -32,6 +35,29 @@ uint nextRand() {
 
 vec3 randVec3() {
 	return vec3(nextRand() * uintBitsToFloat(0x2f800004U), nextRand() * uintBitsToFloat(0x2f800004U), nextRand() * uintBitsToFloat(0x2f800004U));
+}
+
+//same as pbrt (sign trick stolen there), stolen from Handbook of Mathematical Functions (https://personal.math.ubc.ca/~cbm/aands/abramowitz_and_stegun.pdf) 7.1.26
+float erfApprox(float x) {
+	float sign = 1.0f - float(x < 0.0f) * 2.0f;
+	x = abs(x);
+	float t = 1.0f / (1.0f + 0.3275911f * x);
+	return sign * (1 - ((((1.06140f * t - 1.453152027f * t) + 1.421413741f * t) - 0.284496736f * t) + 0.254829592 * t)) * exp(-(x * x));
+}
+
+//pretty much stolen from https://hal.inria.fr/file/index/docid/996995/filename/article.pdf
+//algorithm is in supplemental material at https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fcgf.12417&file=cgf12417-sup-0001-S1.pdf
+//incidentDir should be with 
+vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, vec3 surfaceTangent1, vec3 surfaceTangent2, float alpha) {
+	float U1 = nextRand() * uintBitsToFloat(0x2f800004U);
+	float U2 = nextRand() * uintBitsToFloat(0x2f800004U);
+
+	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, surfaceTangent2), dot(incidentDir, normal));
+	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x * alpha_x, transformedIncidentDir.y * alpha_y, transformedIncidentDir.z));
+
+	//if(U1 < )
+
+	return scaledIncidentDir;
 }
 
 void main() {

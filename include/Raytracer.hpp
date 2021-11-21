@@ -10,6 +10,12 @@ struct Sphere {
 	float color[4];
 };
 
+struct TriangleObject {
+	size_t vertexCount;
+	size_t indexCount;
+	size_t transformCount;
+};
+
 class HardwareSphereRaytracer {
   public:
 	HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount);
@@ -30,19 +36,25 @@ class HardwareSphereRaytracer {
 	void setGeometryBLASBatchNames();
 	void setGeometryTLASBatchNames(size_t frameIndex);
 
+	constexpr size_t vertexDataSize();
+	constexpr size_t indexDataSize();
+	constexpr size_t transformDataSize();
+	constexpr size_t normalDataSize();
+
 	static constexpr size_t m_sphereBLASIndex = 0;
 	static constexpr size_t m_planeBLASIndex = 1;
+	static constexpr size_t m_blasCount = 2;
 
 	static constexpr size_t m_triangleObjectCount = 1;
+
+	static constexpr TriangleObject objects[m_triangleObjectCount]{
+		{ .vertexCount = 4, .indexCount = 6, .transformCount = 0 }
+	};
+
 	static constexpr size_t m_triangleUniqueVertexCount = 4;
 	static constexpr size_t m_triangleUniqueNormalCount = 2;
 	static constexpr size_t m_triangleUniqueIndexCount = 6;
 	static constexpr size_t m_triangleTransformCount = 0;
-
-	static constexpr size_t m_vertexDataSize = sizeof(float) * 3 * m_triangleUniqueVertexCount;
-	static constexpr size_t m_indexDataSize = sizeof(uint16_t) * m_triangleUniqueIndexCount;
-	static constexpr size_t m_transformDataSize = sizeof(VkTransformMatrixKHR) * m_triangleTransformCount;
-	static constexpr size_t m_normalDataSize = sizeof(float) * 4 * m_triangleUniqueNormalCount;
 
 	struct PushConstantData {
 		float worldOffset[3];
@@ -54,12 +66,16 @@ class HardwareSphereRaytracer {
 	AccelerationStructureBatchData m_tlasStructureData[frameInFlightCount];
 
 	VkDeviceMemory m_deviceMemory;
-	BufferAllocation m_accelerationStructureDataBuffer;
-	BufferAllocation m_objectDataBuffer;
-	BufferAllocation m_shaderBindingTableBuffer;
 
-	VkDeviceSize m_accelerationStructureFrameDataSize;
-	VkDeviceSize m_objectFrameDataSize;
+	BufferAllocation m_accelerationStructureDataBuffer;
+	BufferSubAllocation m_instanceDataStorage[frameInFlightCount];
+	BufferSubAllocation m_blasStructureStorage[m_blasCount];
+
+	BufferAllocation m_objectDataBuffer;
+	BufferSubAllocation m_colorDataStorage[frameInFlightCount];
+	BufferSubAllocation m_vertexDataStorage;
+
+	BufferAllocation m_shaderBindingTableBuffer;
 
 	VkDeviceAddress m_accelerationStructureDataDeviceAddress;
 
@@ -67,6 +83,14 @@ class HardwareSphereRaytracer {
 	VkStridedDeviceAddressRegionKHR m_sphereHitShaderBindingTable;
 	VkStridedDeviceAddressRegionKHR m_triangleHitShaderBindingTable;
 	VkStridedDeviceAddressRegionKHR m_missShaderBindingTable;
+
+	BufferAllocation m_stagingBuffer;
+	void* m_mappedStagingBuffer;
+	VkDeviceSize m_stagingFrameDataSize;
+
+	BufferSubAllocation m_aabbStagingStorage;
+	BufferSubAllocation m_vertexStagingStorage;
+	BufferSubAllocation m_indexStagingStorage;
 
 	VkPipeline m_pipeline;
 	VkPipelineLayout m_pipelineLayout;
@@ -76,10 +100,6 @@ class HardwareSphereRaytracer {
 	VkDescriptorSet m_descriptorSets[frameInFlightCount];
 
 	VkSampler m_imageSampler;
-
-	BufferAllocation m_stagingBuffer;
-	void* m_mappedStagingBuffer;
-	VkDeviceSize m_stagingFrameDataSize;
 
 	VkCommandPool m_oneTimeSubmitPool;
 	VkFence m_oneTimeSubmitFence;

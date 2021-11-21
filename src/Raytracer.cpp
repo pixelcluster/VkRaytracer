@@ -1023,3 +1023,11 @@ void HardwareSphereRaytracer::setGeometryTLASBatchNames(size_t frameIndex) {
 				  reinterpret_cast<uint64_t>(m_tlasStructureData[frameIndex].structures[0].structure),
 				  "TLAS for frame in flight " + frameInFlightIndexString);
 }
+
+constexpr size_t HardwareSphereRaytracer::vertexDataSize() { return size_t(); }
+
+constexpr size_t HardwareSphereRaytracer::indexDataSize() { return size_t(); }
+
+constexpr size_t HardwareSphereRaytracer::transformDataSize() { return size_t(); }
+
+constexpr size_t HardwareSphereRaytracer::normalDataSize() { return size_t(); }

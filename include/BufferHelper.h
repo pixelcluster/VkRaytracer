@@ -18,19 +18,47 @@ struct BufferAllocationBatch {
 	std::vector<BufferAllocation> buffers;
 };
 
-struct BufferInfo {
+struct BufferSubAllocation {
+	VkDeviceSize offset;
 	VkDeviceSize size;
-	VkDeviceSize requiredAlignment;
-	VkBufferUsageFlags usage;
-	VkMemoryPropertyFlags requiredProperties;
-	VkMemoryPropertyFlags preferredProperties;
-	VkMemoryPropertyFlags forbiddenProperties;
+	//Must be filled by user
+	VkDeviceAddress address;
+};
+
+struct BufferInfo {
+	VkDeviceSize size = 0;
+	VkDeviceSize requiredAlignment = 0;
+	VkBufferUsageFlags usage = 0;
+	VkMemoryPropertyFlags requiredProperties = 0;
+	VkMemoryPropertyFlags preferredProperties = 0;
+	VkMemoryPropertyFlags forbiddenProperties = 0;
 };
 
 struct SharedMemoryBufferInfo {
 	size_t bufferIndex;
 	VkDeviceSize memoryOffset;
 };
+
+inline BufferSubAllocation addSuballocation(BufferInfo& info, VkDeviceSize size, VkDeviceSize alignment,
+	VkBufferUsageFlags usage, VkMemoryPropertyFlags requiredProperties = 0,
+	VkMemoryPropertyFlags preferredProperties = 0,
+	VkMemoryPropertyFlags forbiddenProperties = 0) {
+	VkDeviceSize newOffset = info.size;
+	if (alignment) {
+		newOffset = std::lcm(info.size, alignment);
+		if (info.requiredAlignment)
+			info.requiredAlignment = std::lcm(info.requiredAlignment, alignment);
+		else
+			info.requiredAlignment = alignment;
+	}
+
+	info.size = newOffset + size;
+	info.usage |= usage;
+	info.requiredProperties |= requiredProperties;
+	info.preferredProperties |= preferredProperties;
+	info.forbiddenProperties |= forbiddenProperties;
+	return BufferSubAllocation{ .offset = newOffset, .size = size };
+}
 
 inline BufferAllocationBatch allocateBatch(RayTracingDevice& device, const std::vector<BufferInfo>& bufferInfos,
 										   VkMemoryAllocateFlags memoryAllocateFlags) {
