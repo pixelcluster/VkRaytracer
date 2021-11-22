@@ -39,8 +39,8 @@ struct SharedMemoryBufferInfo {
 	VkDeviceSize memoryOffset;
 };
 
-inline BufferSubAllocation addSuballocation(BufferInfo& info, VkDeviceSize size, VkDeviceSize alignment,
-	VkBufferUsageFlags usage, VkMemoryPropertyFlags requiredProperties = 0,
+inline BufferSubAllocation addSuballocation(BufferInfo& info, VkDeviceSize size, VkDeviceSize alignment = 0,
+	VkBufferUsageFlags usage = 0, VkMemoryPropertyFlags requiredProperties = 0,
 	VkMemoryPropertyFlags preferredProperties = 0,
 	VkMemoryPropertyFlags forbiddenProperties = 0) {
 	VkDeviceSize newOffset = info.size;

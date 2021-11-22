@@ -2,9 +2,9 @@
 #include <ErrorHelper.hpp>
 #include <Raytracer.hpp>
 #include <ShaderModuleHelper.hpp>
+#include <cmath>
 #include <cstring>
 #include <numbers>
-#include <cmath>
 #include <volk.h>
 
 HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount)
@@ -171,20 +171,6 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 											  .unnormalizedCoordinates = VK_TRUE };
 	verifyResult(vkCreateSampler(m_device.device(), &samplerCreateInfo, nullptr, &m_imageSampler));
 
-	// Determine size and alignment of staging/data buffers per frame in flight (geometry data gets appended at end)
-
-	size_t triangleDataSize = m_vertexDataSize + m_indexDataSize + m_transformDataSize;
-	size_t triangleDataOffset = sizeof(VkAabbPositionsKHR);
-
-	m_stagingFrameDataSize = (sizeof(VkAccelerationStructureInstanceKHR) + sizeof(float) * 4) * objectCount;
-	m_accelerationStructureFrameDataSize = sizeof(VkAccelerationStructureInstanceKHR) * objectCount;
-	m_objectFrameDataSize = sizeof(float) * 4 * objectCount;
-
-	VkDeviceSize structureSizeRemainder = m_accelerationStructureFrameDataSize % 16;
-	if (structureSizeRemainder) {
-		m_accelerationStructureFrameDataSize += 16 - structureSizeRemainder;
-	}
-
 	// Create acceleration structures
 
 	std::vector<AccelerationStructureInitInfo> blasInitInfos = {
@@ -239,49 +225,76 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	// sizeof(VkTransformMatrixKHR) * m_triangleTransformCount: Triangle mesh transform data
 	// shaderGroupHandleSizeAligned * 4: Shader Binding Table
 
-	BufferAllocationBatch stagingBatch = allocateBatch(
-		m_device,
-		{ { .size = m_stagingFrameDataSize * frameInFlightCount + shaderGroupHandleSize * 6 +
-					sizeof(VkAabbPositionsKHR) + triangleDataSize,
-			.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			.requiredProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT } },
-		0);
+	BufferInfo stagingBufferInfo = { .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+									 .requiredProperties =
+										 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
+
+	for (size_t i = 0; i < frameInFlightCount; ++i) {
+		m_objectDataStagingStorage[i] = addSuballocation(stagingBufferInfo, sizeof(PerObjectData) * objectCount);
+		m_objectInstanceStagingStorage[i] =
+			addSuballocation(stagingBufferInfo, sizeof(VkAccelerationStructureInstanceKHR) * objectCount, 16);
+	}
+
+	m_aabbStagingStorage = addSuballocation(stagingBufferInfo, sizeof(VkAabbPositionsKHR));
+	m_vertexStagingStorage = addSuballocation(stagingBufferInfo, vertexDataSize());
+	m_indexStagingStorage = addSuballocation(stagingBufferInfo, indexDataSize());
+	m_transformStagingStorage = addSuballocation(stagingBufferInfo, transformDataSize());
+	m_normalStagingStorage = addSuballocation(stagingBufferInfo, normalDataSize());
+	m_sbtStagingStorage = addSuballocation(stagingBufferInfo, m_stagingSBTCount * shaderGroupHandleSizeAligned);
+
+	BufferAllocationBatch stagingBatch = allocateBatch(m_device, { stagingBufferInfo }, 0);
 	m_stagingBuffer = stagingBatch.buffers[0];
 	if (!m_stagingBuffer.dedicatedMemory) {
 		m_stagingBuffer.dedicatedMemory = stagingBatch.sharedMemory;
 	}
-	verifyResult(vkMapMemory(m_device.device(), m_stagingBuffer.dedicatedMemory, 0,
-							 m_stagingFrameDataSize * frameInFlightCount + shaderGroupHandleSize * 4 +
-								 sizeof(VkAabbPositionsKHR) + triangleDataSize,
-							 0, &m_mappedStagingBuffer));
+	verifyResult(vkMapMemory(m_device.device(), m_stagingBuffer.dedicatedMemory, 0, stagingBufferInfo.size, 0,
+							 &m_mappedStagingBuffer));
 
 	if (enableDebugUtils) {
 		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY,
 					  reinterpret_cast<uint64_t>(m_stagingBuffer.dedicatedMemory), "Staging buffer memory");
 	}
 
+	BufferInfo accelerationStructureDataInfo = {
+		.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+				 VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+				 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		.preferredProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+	};
+
+	BufferInfo sbtDataInfo = {
+		.size = shaderGroupHandleSizeAligned * 6,
+		.requiredAlignment = pipelineProperties.shaderGroupBaseAlignment,
+		.usage = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+				 VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		.preferredProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+	};
+
+	BufferInfo objectDataInfo = { .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+								  .preferredProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+
+	for (size_t i = 0; i < frameInFlightCount; ++i) {
+		m_instanceDataStorage[i] =
+			addSuballocation(accelerationStructureDataInfo, sizeof(VkAccelerationStructureInstanceKHR), 16);
+
+		m_objectDataStorage[i] = addSuballocation(objectDataInfo, sizeof(PerObjectData) * objectCount);
+	}
+
+	m_normalDataStorage = addSuballocation(accelerationStructureDataInfo, normalDataSize());
+
+	m_aabbDataStorage = addSuballocation(accelerationStructureDataInfo, sizeof(VkAabbPositionsKHR));
+	m_vertexDataStorage = addSuballocation(accelerationStructureDataInfo, vertexDataSize());
+	m_indexDataStorage = addSuballocation(accelerationStructureDataInfo, indexDataSize());
+	m_transformDataStorage = addSuballocation(accelerationStructureDataInfo, transformDataSize());
+
 	// Allocate device buffers
-	BufferAllocationBatch deviceBatch =
-		allocateBatch(m_device,
-					  {
-						  // Acceleration structure data buffer
-						  { .size = m_accelerationStructureFrameDataSize * frameInFlightCount +
-									sizeof(VkAabbPositionsKHR) + triangleDataSize,
-							.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-									 VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
-									 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-							.preferredProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT },
-						  // Object data (color, and normal data) buffer
-						  { .size = m_objectFrameDataSize * frameInFlightCount + m_normalDataSize,
-							.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-							.preferredProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT },
-						  // Shader binding table
-						  { .size = shaderGroupHandleSizeAligned * 6,
-							.usage = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR |
-									 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-							.preferredProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT },
-					  },
-					  VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+	BufferAllocationBatch deviceBatch = allocateBatch(m_device,
+													  {
+														  accelerationStructureDataInfo,
+														  objectDataInfo,
+														  sbtDataInfo,
+													  },
+													  VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 	m_deviceMemory = deviceBatch.sharedMemory;
 	m_accelerationStructureDataBuffer = deviceBatch.buffers[0];
 	m_objectDataBuffer = deviceBatch.buffers[1];
@@ -304,7 +317,17 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	deviceAddressInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
 						  .buffer = m_accelerationStructureDataBuffer.buffer };
 
-	m_accelerationStructureDataDeviceAddress = vkGetBufferDeviceAddress(m_device.device(), &deviceAddressInfo);
+	VkDeviceAddress accelerationStructureDataDeviceAddress =
+		vkGetBufferDeviceAddress(m_device.device(), &deviceAddressInfo);
+
+	for (size_t i = 0; i < frameInFlightCount; ++i) {
+		m_instanceDataStorage[i].address = accelerationStructureDataDeviceAddress + m_instanceDataStorage[i].offset;
+	}
+
+	m_aabbDataStorage.address = accelerationStructureDataDeviceAddress + m_aabbDataStorage.offset;
+	m_vertexDataStorage.address = accelerationStructureDataDeviceAddress + m_vertexDataStorage.offset;
+	m_indexDataStorage.address = accelerationStructureDataDeviceAddress + m_indexDataStorage.offset;
+	m_transformDataStorage.address = accelerationStructureDataDeviceAddress + m_transformDataStorage.offset;
 
 	deviceAddressInfo.buffer = m_shaderBindingTableBuffer.buffer;
 
@@ -312,7 +335,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	m_raygenShaderBindingTable = { .deviceAddress = shaderBindingTableDeviceAddress,
 								   .stride = shaderGroupHandleSizeAligned,
 								   .size = shaderGroupHandleSizeAligned };
-	m_sphereHitShaderBindingTable = { .deviceAddress = shaderBindingTableDeviceAddress + shaderGroupHandleSizeAligned * 2,
+	m_sphereHitShaderBindingTable = { .deviceAddress =
+										  shaderBindingTableDeviceAddress + shaderGroupHandleSizeAligned * 2,
 									  .stride = shaderGroupHandleSizeAligned,
 									  .size = shaderGroupHandleSizeAligned };
 	m_triangleHitShaderBindingTable = { .deviceAddress =
@@ -324,13 +348,13 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 								 .size = shaderGroupHandleSizeAligned };
 
 	// Write identity AABBs
-	void* stagingBufferPositionsPointer = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
-																  m_stagingFrameDataSize * frameInFlightCount);
+	void* stagingBufferPositionsPointer =
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_aabbStagingStorage.offset);
 	new (stagingBufferPositionsPointer)
 		VkAabbPositionsKHR{ .minX = -0.5f, .minY = -0.5, .minZ = -0.5, .maxX = 0.5f, .maxY = 0.5f, .maxZ = 0.5f };
 
-	void* triangleVertexDataPointer = reinterpret_cast<void*>(
-		reinterpret_cast<uintptr_t>(stagingBufferPositionsPointer) + sizeof(VkAabbPositionsKHR));
+	void* triangleVertexDataPointer =
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_vertexStagingStorage.offset);
 	// clang-format off
 	// vertices
 	float vertices[4][3] = {
@@ -339,23 +363,23 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 		{ -5.0f,   0.0f,  2500.0f},
 		{ -5.0f,   0.0f,  -5.0f}
 	};
-	std::memcpy(triangleVertexDataPointer, vertices, m_vertexDataSize);
+	std::memcpy(triangleVertexDataPointer, vertices, vertexDataSize());
 	// clang-format on
 
 	void* triangleIndexDataPointer =
-		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(triangleVertexDataPointer) + m_vertexDataSize);
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_indexStagingStorage.offset);
 	uint16_t indices[6] = { 3, 2, 0, 1, 3, 0 };
-	std::memcpy(triangleIndexDataPointer, indices, m_indexDataSize);
+	std::memcpy(triangleIndexDataPointer, indices, indexDataSize());
 
 	void* triangleNormalsDataPointer =
-		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(triangleIndexDataPointer) + m_indexDataSize);
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_normalStagingStorage.offset);
 	float normals[2][4] = { { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } };
-	std::memcpy(triangleNormalsDataPointer, normals, m_normalDataSize);
+	std::memcpy(triangleNormalsDataPointer, normals, normalDataSize());
 
 	void* shaderBindingTablePointer =
-		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(triangleVertexDataPointer) + triangleDataSize + m_normalDataSize);
-	vkGetRayTracingShaderGroupHandlesKHR(m_device.device(), m_pipeline, 0, 4, shaderGroupHandleSize * 4,
-										 shaderBindingTablePointer);
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_sbtStagingStorage.offset);
+	vkGetRayTracingShaderGroupHandlesKHR(m_device.device(), m_pipeline, 0, m_stagingSBTCount,
+										 shaderGroupHandleSize * m_stagingSBTCount, shaderBindingTablePointer);
 
 	vkDestroyShaderModule(m_device.device(), raygenShaderModule, nullptr);
 	vkDestroyShaderModule(m_device.device(), hitShaderModule, nullptr);
@@ -365,8 +389,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 
 	for (size_t i = 0; i < frameInFlightCount; ++i) {
 		VkDescriptorBufferInfo bufferInfo = { .buffer = m_objectDataBuffer.buffer,
-											  .offset = m_objectFrameDataSize * frameInFlightCount,
-											  .range = m_normalDataSize };
+											  .offset = m_objectDataStorage[i].offset,
+											  .range = m_objectDataStorage[i].size };
 		VkWriteDescriptorSet bufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 											 .dstSet = m_descriptorSets[i],
 											 .dstBinding = 3,
@@ -430,7 +454,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 								  .size = shaderGroupHandleSizeAligned * 3 });
 
 	std::vector<VkBufferCopy> bufferCopyRegions;
-	bufferCopyRegions.reserve(frameInFlightCount + 1);
+	bufferCopyRegions.reserve(frameInFlightCount + 3);
 
 	blasBuildInfos.push_back(
 		constructBLASGeometryInfo(VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, blasGeometries[m_sphereBLASIndex]));
@@ -448,13 +472,19 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 									  .size = m_blasStructureData.structures[i].accelerationStructureSize });
 	}
 
-	bufferCopyRegions.push_back({ .srcOffset = m_stagingFrameDataSize * frameInFlightCount,
-								  .dstOffset = m_accelerationStructureFrameDataSize * frameInFlightCount,
-								  .size = sizeof(VkAabbPositionsKHR) + triangleDataSize });
+	bufferCopyRegions.push_back({ .srcOffset = m_aabbStagingStorage.offset,
+								  .dstOffset = m_aabbDataStorage.offset,
+								  .size = m_aabbStagingStorage.size });
+	bufferCopyRegions.push_back({ .srcOffset = m_indexStagingStorage.offset,
+								  .dstOffset = m_indexDataStorage.offset,
+								  .size = m_indexStagingStorage.size });
+	bufferCopyRegions.push_back({ .srcOffset = m_transformStagingStorage.offset,
+								  .dstOffset = m_transformDataStorage.offset,
+								  .size = m_transformStagingStorage.size });
 
 	for (size_t i = 0; i < frameInFlightCount; ++i) {
-		void* mappedFrameSection =
-			reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_stagingFrameDataSize * i);
+		void* mappedFrameSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
+														   m_objectInstanceStagingStorage[i].offset);
 		std::vector<VkAccelerationStructureInstanceKHR> instances =
 			std::vector<VkAccelerationStructureInstanceKHR>(objectCount);
 		for (size_t j = 0; j < sphereCount; ++j) {
@@ -479,8 +509,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 		std::memcpy(mappedFrameSection, instances.data(),
 					instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
 
-		bufferCopyRegions.push_back({ .srcOffset = m_stagingFrameDataSize * i,
-									  .dstOffset = m_accelerationStructureFrameDataSize * i,
+		bufferCopyRegions.push_back({ .srcOffset = m_objectInstanceStagingStorage[i].offset,
+									  .dstOffset = m_instanceDataStorage[i].offset,
 									  .size = instances.size() * sizeof(VkAccelerationStructureInstanceKHR) });
 
 		tlasBuildInfos.push_back(
@@ -504,39 +534,31 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 					static_cast<uint32_t>(bufferCopyRegions.size()), bufferCopyRegions.data());
 
 	VkBufferCopy shaderBindingTableCopies[6] = {
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize,
-		  .dstOffset = 0,
-		  .size = shaderGroupHandleSize },
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize,
+		{ .srcOffset = m_sbtStagingStorage.offset, .dstOffset = 0, .size = shaderGroupHandleSize },
+		{ .srcOffset = m_sbtStagingStorage.offset,
 		  .dstOffset = shaderGroupHandleSizeAligned,
 		  .size = shaderGroupHandleSize },
 
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize +
-					   shaderGroupHandleSize,
+		{ .srcOffset = m_sbtStagingStorage.offset + shaderGroupHandleSize,
 		  .dstOffset = shaderGroupHandleSizeAligned * 2,
 		  .size = shaderGroupHandleSize },
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize +
-					   shaderGroupHandleSize * 2,
+		{ .srcOffset = m_sbtStagingStorage.offset + shaderGroupHandleSize * 2,
 		  .dstOffset = shaderGroupHandleSizeAligned * 3,
 		  .size = shaderGroupHandleSize },
 
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize +
-					   shaderGroupHandleSize * 3,
+		{ .srcOffset = m_sbtStagingStorage.offset + shaderGroupHandleSize * 3,
 		  .dstOffset = shaderGroupHandleSizeAligned * 4,
 		  .size = shaderGroupHandleSize },
-		{ .srcOffset = m_stagingFrameDataSize * frameInFlightCount + sizeof(VkAabbPositionsKHR) + triangleDataSize + m_normalDataSize +
-					   shaderGroupHandleSize * 3,
+		{ .srcOffset = m_sbtStagingStorage.offset + shaderGroupHandleSize * 3,
 		  .dstOffset = shaderGroupHandleSizeAligned * 5,
 		  .size = shaderGroupHandleSize }
 	};
 	vkCmdCopyBuffer(submitCommandBuffer, m_stagingBuffer.buffer, m_shaderBindingTableBuffer.buffer, 6,
 					shaderBindingTableCopies);
 
-	VkBufferCopy normalDataCopy = { .srcOffset = m_stagingFrameDataSize * frameInFlightCount +
-												 sizeof(VkAabbPositionsKHR) + m_vertexDataSize +
-												 m_indexDataSize,
-									.dstOffset = m_objectFrameDataSize * frameInFlightCount,
-									.size = m_normalDataSize };
+	VkBufferCopy normalDataCopy = { .srcOffset = m_normalStagingStorage.offset,
+									.dstOffset = m_normalDataStorage.offset,
+									.size = m_normalDataStorage.size };
 	vkCmdCopyBuffer(submitCommandBuffer, m_stagingBuffer.buffer, m_objectDataBuffer.buffer, 1, &normalDataCopy);
 
 	VkBufferMemoryBarrier copyMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -546,13 +568,13 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 												.dstQueueFamilyIndex = m_device.queueFamilyIndex(),
 												.buffer = m_accelerationStructureDataBuffer.buffer,
 												.offset = 0,
-												.size = m_accelerationStructureFrameDataSize * frameInFlightCount };
+												.size = VK_WHOLE_SIZE };
 
 	vkCmdPipelineBarrier(submitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 1, &copyMemoryBarrier,
 						 0, nullptr);
 
-	//vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(6));
+	// vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(6));
 
 	vkCmdBuildAccelerationStructuresKHR(submitCommandBuffer, static_cast<uint32_t>(blasBuildInfos.size()),
 										blasBuildInfos.data(), ptrBLASRangeInfo.data());
@@ -568,7 +590,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr,
 						 static_cast<uint32_t>(tlasBuildBarriers.size()), tlasBuildBarriers.data(), 0, nullptr);
 
-	//vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(7));
+	// vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(7));
 
 	VkBufferMemoryBarrier normalCopyBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
 												.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -576,13 +598,13 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 												.srcQueueFamilyIndex = m_device.queueFamilyIndex(),
 												.dstQueueFamilyIndex = m_device.queueFamilyIndex(),
 												.buffer = m_objectDataBuffer.buffer,
-												.offset = m_objectFrameDataSize * frameInFlightCount,
-												.size = m_normalDataSize };
+												.offset = m_normalDataStorage.offset,
+												.size = m_normalDataStorage.size };
 	vkCmdPipelineBarrier(submitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
 						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 1, &normalCopyBarrier, 0,
 						 nullptr);
 
-	//vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(8));
+	// vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(8));
 
 	verifyResult(vkEndCommandBuffer(submitCommandBuffer));
 
@@ -705,8 +727,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 										.pImageInfo = &imageInfo };
 
 	VkDescriptorBufferInfo bufferInfo = { .buffer = m_objectDataBuffer.buffer,
-										  .offset = m_objectFrameDataSize * frameData.frameIndex,
-										  .range = m_objectFrameDataSize };
+										  .offset = m_objectDataStorage[frameData.frameIndex].offset,
+										  .range = m_objectDataStorage[frameData.frameIndex].size };
 	VkWriteDescriptorSet bufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 										 .dstSet = m_descriptorSets[frameData.frameIndex],
 										 .dstBinding = 2,
@@ -719,14 +741,14 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 
 	vkUpdateDescriptorSets(m_device.device(), 3, writes, 0, nullptr);
 
-	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(0));
+	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(0));
 
 	// Write updated data
 
-	void* mappedFrameSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
-													   m_stagingFrameDataSize * frameData.frameIndex);
-	void* sphereDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mappedFrameSection) +
-													  (spheres.size() + m_triangleObjectCount) * sizeof(VkAccelerationStructureInstanceKHR));
+	void* instanceDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
+													   m_objectInstanceStagingStorage[frameData.frameIndex].offset);
+	void* sphereDataSection =
+		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_objectDataStorage[frameData.frameIndex].offset);
 	std::vector<VkAccelerationStructureInstanceKHR> instances =
 		std::vector<VkAccelerationStructureInstanceKHR>(spheres.size() + m_triangleObjectCount);
 	std::vector<float> objectColors = std::vector<float>((spheres.size() + m_triangleObjectCount) * 4);
@@ -757,24 +779,23 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 		objectColors[(spheres.size() + i) * 4 + 2] = 1.0f;
 		objectColors[(spheres.size() + i) * 4 + 3] = 0.0f;
 	}
-	std::memcpy(mappedFrameSection, instances.data(), instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
+	std::memcpy(instanceDataSection, instances.data(), instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
 	std::memcpy(sphereDataSection, objectColors.data(), objectColors.size() * sizeof(float));
 
-	VkBufferCopy instanceCopyRegion = { .srcOffset = m_stagingFrameDataSize * frameData.frameIndex,
-										.dstOffset = m_accelerationStructureFrameDataSize * frameData.frameIndex,
+	VkBufferCopy instanceCopyRegion = { .srcOffset = m_objectInstanceStagingStorage[frameData.frameIndex].offset,
+										.dstOffset = m_instanceDataStorage[frameData.frameIndex].offset,
 										.size = instances.size() * sizeof(VkAccelerationStructureInstanceKHR) };
 
 	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_accelerationStructureDataBuffer.buffer, 1,
 					&instanceCopyRegion);
 
-	VkBufferCopy sphereCopyRegion = { .srcOffset = m_stagingFrameDataSize * frameData.frameIndex +
-												   instances.size() * sizeof(VkAccelerationStructureInstanceKHR),
-									  .dstOffset = m_objectFrameDataSize * frameData.frameIndex,
-									  .size = objectColors.size() * sizeof(float) };
+	VkBufferCopy dataCopyRegion = { .srcOffset = m_objectDataStagingStorage[frameData.frameIndex].offset,
+									  .dstOffset = m_objectDataStorage[frameData.frameIndex].offset,
+									  .size = m_objectDataStagingStorage[frameData.frameIndex].size };
 
-	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_objectDataBuffer.buffer, 1, &sphereCopyRegion);
+	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_objectDataBuffer.buffer, 1, &dataCopyRegion);
 
-	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(1));
+	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(1));
 
 	VkBufferMemoryBarrier copyMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
 												.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -782,14 +803,14 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 												.srcQueueFamilyIndex = m_device.queueFamilyIndex(),
 												.dstQueueFamilyIndex = m_device.queueFamilyIndex(),
 												.buffer = m_accelerationStructureDataBuffer.buffer,
-												.offset = m_accelerationStructureFrameDataSize * frameData.frameIndex,
-												.size = instances.size() * sizeof(VkAccelerationStructureInstanceKHR) };
+												.offset = m_instanceDataStorage[frameData.frameIndex].offset,
+												.size = m_instanceDataStorage[frameData.frameIndex].size };
 
 	vkCmdPipelineBarrier(frameData.commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 1, &copyMemoryBarrier,
 						 0, nullptr);
 
-	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(2));
+	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(2));
 
 	// Build acceleration structures
 
@@ -797,14 +818,14 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	VkAccelerationStructureBuildGeometryInfoKHR tlasAccelerationStructureBuildInfo =
 		constructTLASGeometryInfo(frameData.frameIndex, VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR, tlasGeometry);
 
-	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = { .primitiveCount =
-																   static_cast<uint32_t>(spheres.size() + m_triangleObjectCount) };
+	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = { .primitiveCount = static_cast<uint32_t>(
+																   spheres.size() + m_triangleObjectCount) };
 	VkAccelerationStructureBuildRangeInfoKHR* ptrTLASRangeInfo = &tlasRangeInfo;
 
 	vkCmdBuildAccelerationStructuresKHR(frameData.commandBuffer, 1, &tlasAccelerationStructureBuildInfo,
 										&ptrTLASRangeInfo);
 
-	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(3));
+	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(3));
 
 	VkImageSubresourceRange imageRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 										   .baseMipLevel = 0,
@@ -828,9 +849,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 													  .srcQueueFamilyIndex = m_device.queueFamilyIndex(),
 													  .dstQueueFamilyIndex = m_device.queueFamilyIndex(),
 													  .buffer = m_objectDataBuffer.buffer,
-													  .offset =
-														  m_objectFrameDataSize * frameData.frameIndex,
-													  .size = objectColors.size() * sizeof(float) };
+													  .offset = m_objectDataStorage[frameData.frameIndex].offset,
+													  .size = m_objectDataStorage[frameData.frameIndex].size };
 
 	VkMemoryBarrier buildMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 										   .srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
@@ -839,8 +859,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdPipelineBarrier(frameData.commandBuffer,
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
 							 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_TRANSFER_BIT,
-						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &buildMemoryBarrier, 1, &objectDataMemoryBarrier, 1,
-						 &memoryBarrierBefore);
+						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &buildMemoryBarrier, 1,
+						 &objectDataMemoryBarrier, 1, &memoryBarrierBefore);
 
 	vkCmdBindPipeline(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_pipeline);
 
@@ -854,7 +874,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdBindDescriptorSets(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_pipelineLayout, 0, 1,
 							&m_descriptorSets[frameData.frameIndex], 0, nullptr);
 
-	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(4));
+	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(4));
 
 	VkStridedDeviceAddressRegionKHR nullRegion = {};
 
@@ -876,7 +896,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 0, nullptr, 1,
 						 &memoryBarrierAfter);
 
-	//vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(5));
+	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(5));
 
 	return m_device.endFrame();
 }
@@ -887,8 +907,7 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructBL
 					   .geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
 					   .geometry = { .aabbs = { VkAccelerationStructureGeometryAabbsDataKHR{
 										 .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
-										 .data = m_accelerationStructureDataDeviceAddress +
-												 m_accelerationStructureFrameDataSize * frameInFlightCount,
+										 .data = m_aabbDataStorage.address,
 										 .stride = sizeof(VkAabbPositionsKHR) } } } };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
@@ -913,15 +932,11 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructPl
 					   .geometry = { .triangles = { VkAccelerationStructureGeometryTrianglesDataKHR{
 										 .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
 										 .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
-										 .vertexData = m_accelerationStructureDataDeviceAddress +
-													   m_accelerationStructureFrameDataSize * frameInFlightCount +
-													   sizeof(VkAabbPositionsKHR),
+										 .vertexData = m_vertexDataStorage.address,
 										 .vertexStride = 3 * sizeof(float),
 										 .maxVertex = 3,
 										 .indexType = VK_INDEX_TYPE_UINT16,
-										 .indexData = m_accelerationStructureDataDeviceAddress +
-													  m_accelerationStructureFrameDataSize * frameInFlightCount +
-													  sizeof(VkAabbPositionsKHR) + m_vertexDataSize } } } };
+										 .indexData = m_indexDataStorage.address } } } };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			 .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
@@ -945,8 +960,7 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructTL
 					   .geometry = {
 						   .instances = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
 										  .arrayOfPointers = VK_FALSE,
-										  .data = m_accelerationStructureDataDeviceAddress +
-												  m_accelerationStructureFrameDataSize * frameIndex } } };
+										  .data = m_instanceDataStorage[frameIndex].address } } };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			 .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
@@ -1031,3 +1045,11 @@ constexpr size_t HardwareSphereRaytracer::indexDataSize() { return size_t(); }
 constexpr size_t HardwareSphereRaytracer::transformDataSize() { return size_t(); }
 
 constexpr size_t HardwareSphereRaytracer::normalDataSize() { return size_t(); }
+
+constexpr size_t HardwareSphereRaytracer::uniqueVertexCount() { return size_t(); }
+
+constexpr size_t HardwareSphereRaytracer::indexCount() { return size_t(); }
+
+constexpr size_t HardwareSphereRaytracer::transformCount() { return size_t(); }
+
+constexpr size_t HardwareSphereRaytracer::normalCount() { return size_t(); }

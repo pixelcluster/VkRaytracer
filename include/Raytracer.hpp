@@ -41,25 +41,32 @@ class HardwareSphereRaytracer {
 	constexpr size_t transformDataSize();
 	constexpr size_t normalDataSize();
 
+	constexpr size_t uniqueVertexCount();
+	constexpr size_t indexCount();
+	constexpr size_t transformCount();
+	constexpr size_t normalCount();
+
 	static constexpr size_t m_sphereBLASIndex = 0;
 	static constexpr size_t m_planeBLASIndex = 1;
 	static constexpr size_t m_blasCount = 2;
 
 	static constexpr size_t m_triangleObjectCount = 1;
 
+	static constexpr size_t m_stagingSBTCount = 4;
+	static constexpr size_t m_sbtCount = 6;
+
 	static constexpr TriangleObject objects[m_triangleObjectCount]{
 		{ .vertexCount = 4, .indexCount = 6, .transformCount = 0 }
 	};
-
-	static constexpr size_t m_triangleUniqueVertexCount = 4;
-	static constexpr size_t m_triangleUniqueNormalCount = 2;
-	static constexpr size_t m_triangleUniqueIndexCount = 6;
-	static constexpr size_t m_triangleTransformCount = 0;
 
 	struct PushConstantData {
 		float worldOffset[3];
 		float aspectRatio;
 		float tanHalfFov;
+	};
+
+	struct PerObjectData {
+		float color[4];
 	};
 
 	AccelerationStructureBatchData m_blasStructureData;
@@ -69,15 +76,16 @@ class HardwareSphereRaytracer {
 
 	BufferAllocation m_accelerationStructureDataBuffer;
 	BufferSubAllocation m_instanceDataStorage[frameInFlightCount];
-	BufferSubAllocation m_blasStructureStorage[m_blasCount];
+	BufferSubAllocation m_aabbDataStorage;
+	BufferSubAllocation m_vertexDataStorage;
+	BufferSubAllocation m_indexDataStorage;
+	BufferSubAllocation m_transformDataStorage;
 
 	BufferAllocation m_objectDataBuffer;
-	BufferSubAllocation m_colorDataStorage[frameInFlightCount];
-	BufferSubAllocation m_vertexDataStorage;
+	BufferSubAllocation m_objectDataStorage[frameInFlightCount];
+	BufferSubAllocation m_normalDataStorage;
 
 	BufferAllocation m_shaderBindingTableBuffer;
-
-	VkDeviceAddress m_accelerationStructureDataDeviceAddress;
 
 	VkStridedDeviceAddressRegionKHR m_raygenShaderBindingTable;
 	VkStridedDeviceAddressRegionKHR m_sphereHitShaderBindingTable;
@@ -86,11 +94,16 @@ class HardwareSphereRaytracer {
 
 	BufferAllocation m_stagingBuffer;
 	void* m_mappedStagingBuffer;
-	VkDeviceSize m_stagingFrameDataSize;
+
+	BufferSubAllocation m_objectDataStagingStorage[frameInFlightCount];
+	BufferSubAllocation m_objectInstanceStagingStorage[frameInFlightCount];
 
 	BufferSubAllocation m_aabbStagingStorage;
 	BufferSubAllocation m_vertexStagingStorage;
 	BufferSubAllocation m_indexStagingStorage;
+	BufferSubAllocation m_transformStagingStorage;
+	BufferSubAllocation m_normalStagingStorage;
+	BufferSubAllocation m_sbtStagingStorage;
 
 	VkPipeline m_pipeline;
 	VkPipelineLayout m_pipelineLayout;
