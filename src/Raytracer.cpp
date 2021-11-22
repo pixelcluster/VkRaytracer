@@ -274,13 +274,13 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 								  .preferredProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
 
 	for (size_t i = 0; i < frameInFlightCount; ++i) {
-		m_instanceDataStorage[i] =
-			addSuballocation(accelerationStructureDataInfo, sizeof(VkAccelerationStructureInstanceKHR), 16);
+		m_instanceDataStorage[i] = addSuballocation(accelerationStructureDataInfo,
+													sizeof(VkAccelerationStructureInstanceKHR) * objectCount, 16);
 
 		m_objectDataStorage[i] = addSuballocation(objectDataInfo, sizeof(PerObjectData) * objectCount);
 	}
 
-	m_normalDataStorage = addSuballocation(accelerationStructureDataInfo, normalDataSize());
+	m_normalDataStorage = addSuballocation(objectDataInfo, normalDataSize());
 
 	m_aabbDataStorage = addSuballocation(accelerationStructureDataInfo, sizeof(VkAabbPositionsKHR));
 	m_vertexDataStorage = addSuballocation(accelerationStructureDataInfo, vertexDataSize());
@@ -389,8 +389,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 
 	for (size_t i = 0; i < frameInFlightCount; ++i) {
 		VkDescriptorBufferInfo bufferInfo = { .buffer = m_objectDataBuffer.buffer,
-											  .offset = m_objectDataStorage[i].offset,
-											  .range = m_objectDataStorage[i].size };
+											  .offset = m_normalDataStorage.offset,
+											  .range = m_normalDataStorage.size };
 		VkWriteDescriptorSet bufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 											 .dstSet = m_descriptorSets[i],
 											 .dstBinding = 3,
@@ -475,12 +475,17 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	bufferCopyRegions.push_back({ .srcOffset = m_aabbStagingStorage.offset,
 								  .dstOffset = m_aabbDataStorage.offset,
 								  .size = m_aabbStagingStorage.size });
+	bufferCopyRegions.push_back({ .srcOffset = m_vertexStagingStorage.offset,
+								  .dstOffset = m_vertexDataStorage.offset,
+								  .size = m_vertexStagingStorage.size });
 	bufferCopyRegions.push_back({ .srcOffset = m_indexStagingStorage.offset,
 								  .dstOffset = m_indexDataStorage.offset,
 								  .size = m_indexStagingStorage.size });
-	bufferCopyRegions.push_back({ .srcOffset = m_transformStagingStorage.offset,
-								  .dstOffset = m_transformDataStorage.offset,
-								  .size = m_transformStagingStorage.size });
+	if (m_transformStagingStorage.size) {
+		bufferCopyRegions.push_back({ .srcOffset = m_transformStagingStorage.offset,
+									  .dstOffset = m_transformDataStorage.offset,
+									  .size = m_transformStagingStorage.size });
+	}
 
 	for (size_t i = 0; i < frameInFlightCount; ++i) {
 		void* mappedFrameSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
@@ -492,7 +497,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 														{ 0.0f, 1.0f, 0.0f, 0.0f },
 														{ 0.0f, 0.0f, 1.0f, 0.0f } } },
 							 .instanceCustomIndex = static_cast<uint32_t>(j),
-							 .mask = 0xFFFFFFFF,
+							 .mask = 0xFF,
 							 .accelerationStructureReference =
 								 m_blasStructureData.structures[m_sphereBLASIndex].deviceAddress };
 		}
@@ -501,7 +506,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 																	  { 0.0f, 1.0f, 0.0f, 0.0f },
 																	  { 0.0f, 0.0f, 1.0f, 0.0f } } },
 										   .instanceCustomIndex = static_cast<uint32_t>(j),
-										   .mask = 0xFFFFFFFF,
+										   .mask = 0xFF,
 										   .instanceShaderBindingTableRecordOffset = 1,
 										   .accelerationStructureReference =
 											   m_blasStructureData.structures[m_planeBLASIndex].deviceAddress };
@@ -748,7 +753,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	void* instanceDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
 														m_objectInstanceStagingStorage[frameData.frameIndex].offset);
 	void* sphereDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
-													  m_objectDataStorage[frameData.frameIndex].offset);
+													  m_objectDataStagingStorage[frameData.frameIndex].offset);
 	std::vector<VkAccelerationStructureInstanceKHR> instances =
 		std::vector<VkAccelerationStructureInstanceKHR>(spheres.size() + m_triangleObjectCount);
 	std::vector<PerObjectData> objectData = std::vector<PerObjectData>(spheres.size() + m_triangleObjectCount);
@@ -757,7 +762,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 													{ 0.0f, 2 * spheres[i].radius, 0.0f, spheres[i].position[1] },
 													{ 0.0f, 0.0f, 2 * spheres[i].radius, spheres[i].position[2] } } },
 						 .instanceCustomIndex = static_cast<uint32_t>(i),
-						 .mask = 0xFFFFFFFF,
+						 .mask = 0xFF,
 						 .accelerationStructureReference =
 							 m_blasStructureData.structures[m_sphereBLASIndex].deviceAddress };
 		std::memcpy(objectData[i].color, spheres[i].color, sizeof(float) * 4);
@@ -767,11 +772,11 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 																	 { 0.0f, 1.0f, 0.0f, 0.0f },
 																	 { 0.0f, 0.0f, 1.0f, 0.0f } } },
 										  .instanceCustomIndex = static_cast<uint32_t>(i),
-										  .mask = 0xFFFFFFFF,
+										  .mask = 0xFF,
 										  .instanceShaderBindingTableRecordOffset = 1,
 										  .accelerationStructureReference =
 											  m_blasStructureData.structures[m_planeBLASIndex].deviceAddress };
-		float color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		float color[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 		std::memcpy(objectData[spheres.size() + i].color, color, sizeof(float) * 4);
 	}
 	std::memcpy(instanceDataSection, instances.data(), instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
@@ -902,7 +907,7 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructBL
 					   .geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
 					   .geometry = { .aabbs = { VkAccelerationStructureGeometryAabbsDataKHR{
 										 .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
-										 .data = m_aabbDataStorage.address,
+										 .data = { .deviceAddress = m_aabbDataStorage.address },
 										 .stride = sizeof(VkAabbPositionsKHR) } } } };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
@@ -916,8 +921,9 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructBL
 			 .dstAccelerationStructure = m_blasStructureData.structures[m_sphereBLASIndex].structure,
 			 .geometryCount = 1,
 			 .pGeometries = &targetGeometry,
-			 .scratchData = m_blasStructureData.scratchBufferDeviceAddress +
-							m_blasStructureData.structures[m_sphereBLASIndex].scratchBufferBaseOffset };
+			 .scratchData = { .deviceAddress =
+								  m_blasStructureData.scratchBufferDeviceAddress +
+								  m_blasStructureData.structures[m_sphereBLASIndex].scratchBufferBaseOffset } };
 }
 
 VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructPlaneBLASGeometryInfo(
@@ -927,11 +933,11 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructPl
 					   .geometry = { .triangles = { VkAccelerationStructureGeometryTrianglesDataKHR{
 										 .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
 										 .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
-										 .vertexData = m_vertexDataStorage.address,
+										 .vertexData = { .deviceAddress = m_vertexDataStorage.address },
 										 .vertexStride = 3 * sizeof(float),
 										 .maxVertex = 3,
 										 .indexType = VK_INDEX_TYPE_UINT16,
-										 .indexData = m_indexDataStorage.address } } } };
+										 .indexData = { .deviceAddress = m_indexDataStorage.address } } } } };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			 .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
@@ -944,8 +950,9 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructPl
 			 .dstAccelerationStructure = m_blasStructureData.structures[m_planeBLASIndex].structure,
 			 .geometryCount = 1,
 			 .pGeometries = &targetGeometry,
-			 .scratchData = m_blasStructureData.scratchBufferDeviceAddress +
-							m_blasStructureData.structures[m_planeBLASIndex].scratchBufferBaseOffset };
+			 .scratchData = { .deviceAddress =
+								  m_blasStructureData.scratchBufferDeviceAddress +
+								  m_blasStructureData.structures[m_planeBLASIndex].scratchBufferBaseOffset } };
 }
 
 VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructTLASGeometryInfo(
@@ -955,7 +962,7 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructTL
 					   .geometry = {
 						   .instances = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
 										  .arrayOfPointers = VK_FALSE,
-										  .data = m_instanceDataStorage[frameIndex].address } } };
+										  .data = { .deviceAddress = m_instanceDataStorage[frameIndex].address } } } };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			 .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
@@ -968,8 +975,9 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructTL
 			 .dstAccelerationStructure = m_tlasStructureData[frameIndex].structures[0].structure,
 			 .geometryCount = 1,
 			 .pGeometries = &targetGeometry,
-			 .scratchData = m_tlasStructureData[frameIndex].scratchBufferDeviceAddress +
-							m_tlasStructureData[frameIndex].structures[0].scratchBufferBaseOffset };
+			 .scratchData = { .deviceAddress =
+								  m_tlasStructureData[frameIndex].scratchBufferDeviceAddress +
+								  m_tlasStructureData[frameIndex].structures[0].scratchBufferBaseOffset } };
 }
 
 void HardwareSphereRaytracer::setGeometryBLASBatchNames() {
@@ -1033,18 +1041,44 @@ void HardwareSphereRaytracer::setGeometryTLASBatchNames(size_t frameIndex) {
 				  "TLAS for frame in flight " + frameInFlightIndexString);
 }
 
-constexpr size_t HardwareSphereRaytracer::vertexDataSize() { return size_t(); }
+constexpr size_t HardwareSphereRaytracer::vertexDataSize() { return uniqueVertexCount() * sizeof(float) * 3; }
 
-constexpr size_t HardwareSphereRaytracer::indexDataSize() { return size_t(); }
+constexpr size_t HardwareSphereRaytracer::indexDataSize() { return indexCount() * sizeof(uint16_t); }
 
-constexpr size_t HardwareSphereRaytracer::transformDataSize() { return size_t(); }
+constexpr size_t HardwareSphereRaytracer::transformDataSize() {
+	return transformCount() * sizeof(VkTransformMatrixKHR);
+}
 
-constexpr size_t HardwareSphereRaytracer::normalDataSize() { return size_t(); }
+constexpr size_t HardwareSphereRaytracer::normalDataSize() { return normalCount() * sizeof(float) * 4; }
 
-constexpr size_t HardwareSphereRaytracer::uniqueVertexCount() { return size_t(); }
+constexpr size_t HardwareSphereRaytracer::uniqueVertexCount() {
+	size_t vertexCount = 0;
+	for (size_t i = 0; i < m_triangleObjectCount; ++i) {
+		vertexCount += m_triangleObjects[i].vertexCount;
+	}
+	return vertexCount;
+}
 
-constexpr size_t HardwareSphereRaytracer::indexCount() { return size_t(); }
+constexpr size_t HardwareSphereRaytracer::indexCount() {
+	size_t indexCount = 0;
+	for (size_t i = 0; i < m_triangleObjectCount; ++i) {
+		indexCount += m_triangleObjects[i].indexCount;
+	}
+	return indexCount;
+}
 
-constexpr size_t HardwareSphereRaytracer::transformCount() { return size_t(); }
+constexpr size_t HardwareSphereRaytracer::transformCount() {
+	size_t transformCount = 0;
+	for (size_t i = 0; i < m_triangleObjectCount; ++i) {
+		transformCount += m_triangleObjects[i].transformCount;
+	}
+	return transformCount;
+}
 
-constexpr size_t HardwareSphereRaytracer::normalCount() { return size_t(); }
+constexpr size_t HardwareSphereRaytracer::normalCount() {
+	size_t normalCount = 0;
+	for (size_t i = 0; i < m_triangleObjectCount; ++i) {
+		normalCount += m_triangleObjects[i].indexCount / 3;
+	}
+	return normalCount;
+}

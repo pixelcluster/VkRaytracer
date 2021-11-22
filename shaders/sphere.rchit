@@ -40,8 +40,10 @@ void main() {
 			fresnelFactor = 1.0f;
 		}
 
-		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint, 0, reflect(gl_WorldRayDirectionEXT, objectHitNormal), 999999999.0f, 0);
-		payload.color = vec4((fresnelFactor * colors[gl_InstanceID].rgb * payload.color.rgb) / cosThetaT, 1.0f);
+		vec3 nextRayDir = reflect(gl_WorldRayDirectionEXT, objectHitNormal);
+
+		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + nextRayDir * 0.001f, 0, nextRayDir, 999999999.0f, 0);
+		payload.color =  vec4((fresnelFactor * colors[gl_InstanceID].rgb * payload.color.rgb) / cosThetaT.xxx, 1.0f);
 	}
 	else {
 		payload.color = vec4(colors[gl_InstanceID].rgb, 1.0f);

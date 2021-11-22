@@ -55,7 +55,7 @@ class HardwareSphereRaytracer {
 	static constexpr size_t m_stagingSBTCount = 4;
 	static constexpr size_t m_sbtCount = 6;
 
-	static constexpr TriangleObject objects[m_triangleObjectCount]{
+	static constexpr TriangleObject m_triangleObjects[m_triangleObjectCount]{
 		{ .vertexCount = 4, .indexCount = 6, .transformCount = 0 }
 	};
 
