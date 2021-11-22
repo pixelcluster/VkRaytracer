@@ -746,12 +746,12 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	// Write updated data
 
 	void* instanceDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
-													   m_objectInstanceStagingStorage[frameData.frameIndex].offset);
-	void* sphereDataSection =
-		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_objectDataStorage[frameData.frameIndex].offset);
+														m_objectInstanceStagingStorage[frameData.frameIndex].offset);
+	void* sphereDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
+													  m_objectDataStorage[frameData.frameIndex].offset);
 	std::vector<VkAccelerationStructureInstanceKHR> instances =
 		std::vector<VkAccelerationStructureInstanceKHR>(spheres.size() + m_triangleObjectCount);
-	std::vector<float> objectColors = std::vector<float>((spheres.size() + m_triangleObjectCount) * 4);
+	std::vector<PerObjectData> objectData = std::vector<PerObjectData>(spheres.size() + m_triangleObjectCount);
 	for (size_t i = 0; i < spheres.size(); ++i) {
 		instances[i] = { .transform = { .matrix = { { 2 * spheres[i].radius, 0.0f, 0.0f, spheres[i].position[0] },
 													{ 0.0f, 2 * spheres[i].radius, 0.0f, spheres[i].position[1] },
@@ -760,10 +760,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 						 .mask = 0xFFFFFFFF,
 						 .accelerationStructureReference =
 							 m_blasStructureData.structures[m_sphereBLASIndex].deviceAddress };
-		objectColors[i * 4 + 0] = spheres[i].color[0];
-		objectColors[i * 4 + 1] = spheres[i].color[1];
-		objectColors[i * 4 + 2] = spheres[i].color[2];
-		objectColors[i * 4 + 3] = spheres[i].color[3];
+		std::memcpy(objectData[i].color, spheres[i].color, sizeof(float) * 4);
 	}
 	for (size_t i = 0; i < m_triangleObjectCount; ++i) {
 		instances[spheres.size() + i] = { .transform = { .matrix = { { 1.0f, 0.0f, 0.0f, 0.0f },
@@ -774,13 +771,11 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 										  .instanceShaderBindingTableRecordOffset = 1,
 										  .accelerationStructureReference =
 											  m_blasStructureData.structures[m_planeBLASIndex].deviceAddress };
-		objectColors[(spheres.size() + i) * 4 + 0] = 1.0f;
-		objectColors[(spheres.size() + i) * 4 + 1] = 1.0f;
-		objectColors[(spheres.size() + i) * 4 + 2] = 1.0f;
-		objectColors[(spheres.size() + i) * 4 + 3] = 0.0f;
+		float color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		std::memcpy(objectData[spheres.size() + i].color, color, sizeof(float) * 4);
 	}
 	std::memcpy(instanceDataSection, instances.data(), instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
-	std::memcpy(sphereDataSection, objectColors.data(), objectColors.size() * sizeof(float));
+	std::memcpy(sphereDataSection, objectData.data(), objectData.size() * sizeof(PerObjectData));
 
 	VkBufferCopy instanceCopyRegion = { .srcOffset = m_objectInstanceStagingStorage[frameData.frameIndex].offset,
 										.dstOffset = m_instanceDataStorage[frameData.frameIndex].offset,
@@ -790,8 +785,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 					&instanceCopyRegion);
 
 	VkBufferCopy dataCopyRegion = { .srcOffset = m_objectDataStagingStorage[frameData.frameIndex].offset,
-									  .dstOffset = m_objectDataStorage[frameData.frameIndex].offset,
-									  .size = m_objectDataStagingStorage[frameData.frameIndex].size };
+									.dstOffset = m_objectDataStorage[frameData.frameIndex].offset,
+									.size = m_objectDataStagingStorage[frameData.frameIndex].size };
 
 	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_objectDataBuffer.buffer, 1, &dataCopyRegion);
 
