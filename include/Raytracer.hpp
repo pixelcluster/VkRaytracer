@@ -18,7 +18,7 @@ struct TriangleObject {
 
 class HardwareSphereRaytracer {
   public:
-	HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount);
+	HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount, std::vector<size_t> emissiveSphereIndices);
 	~HardwareSphereRaytracer();
 	// RayTracingDevice already deletes/defaults copy/move constructors
 
@@ -69,6 +69,18 @@ class HardwareSphereRaytracer {
 		float color[4];
 	};
 
+	struct PerVertexData {
+		float position[4];
+	};
+
+	struct LightData {
+		float position[4];
+		float radius;
+		float padding[3];
+	};
+
+	std::vector<size_t> m_emissiveSphereIndices;
+
 	AccelerationStructureBatchData m_blasStructureData;
 	AccelerationStructureBatchData m_tlasStructureData[frameInFlightCount];
 
@@ -111,6 +123,8 @@ class HardwareSphereRaytracer {
 	VkDescriptorSetLayout m_descriptorSetLayout;
 	VkDescriptorPool m_descriptorPool;
 	VkDescriptorSet m_descriptorSets[frameInFlightCount];
+	VkDescriptorSetLayout m_geometryDescriptorSetLayout;
+	VkDescriptorSet m_geometryDescriptorSet;
 
 	VkSampler m_imageSampler;
 

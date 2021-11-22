@@ -9,7 +9,7 @@ int main() {
 
 	std::vector<Sphere> spheres = std::vector<Sphere>(50 * 50);
 
-	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480, spheres.size());
+	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480, spheres.size(), {});
 
 	for (size_t i = 0; i < 50; ++i) {
 		for (size_t j = 0; j < 50; ++j) {

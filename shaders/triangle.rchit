@@ -5,7 +5,8 @@
 layout(std430, set = 0, binding = 2) buffer SphereBuffer {
 	vec4 colors[];
 };
-layout(std430, set = 0, binding = 3) buffer NormalBuffer {
+
+layout(std430, set = 1, binding = 2) buffer NormalBuffer {
 	vec4 normals[];
 };
 

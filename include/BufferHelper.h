@@ -9,7 +9,7 @@
 #include <vulkan/vulkan.h>
 
 struct BufferAllocation {
-	VkBuffer buffer;
+	VkBuffer buffer = VK_NULL_HANDLE;
 	VkDeviceMemory dedicatedMemory = VK_NULL_HANDLE;
 };
 
@@ -19,10 +19,10 @@ struct BufferAllocationBatch {
 };
 
 struct BufferSubAllocation {
-	VkDeviceSize offset;
-	VkDeviceSize size;
+	VkDeviceSize offset = 0;
+	VkDeviceSize size = 0;
 	//Must be filled by user
-	VkDeviceAddress address;
+	VkDeviceAddress address = {};
 };
 
 struct BufferInfo {

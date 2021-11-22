@@ -14,8 +14,8 @@ struct AccelerationStructureData {
 struct AccelerationStructureBatchData {
 	BufferAllocation structureBuffer;
 	BufferAllocation scratchBuffer;
-	VkDeviceMemory sharedStructureMemory;
-	VkDeviceAddress scratchBufferDeviceAddress;
+	VkDeviceMemory sharedStructureMemory = {};
+	VkDeviceAddress scratchBufferDeviceAddress = {};
 	std::vector<AccelerationStructureData> structures;
 };
 
