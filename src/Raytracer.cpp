@@ -14,7 +14,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 
 	// Create ray tracing pipeline
 
-	VkDescriptorSetLayoutBinding bindings[3] = { { .binding = 0,
+	VkDescriptorSetLayoutBinding bindings[4] = { { .binding = 0,
 												   .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
 												   .descriptorCount = 1,
 												   .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
@@ -24,6 +24,10 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 												   .descriptorCount = 1,
 												   .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR },
 												 { .binding = 2,
+												   .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+												   .descriptorCount = 1,
+												   .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR },
+												 { .binding = 3,
 												   .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 												   .descriptorCount = 1,
 												   .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR } };
@@ -41,7 +45,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 														   .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR } };
 
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 3, .pBindings = bindings
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 4, .pBindings = bindings
 	};
 
 	verifyResult(vkCreateDescriptorSetLayout(m_device.device(), &descriptorSetLayoutCreateInfo, nullptr,
@@ -161,7 +165,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	VkDescriptorPoolSize poolSizes[3] = {
 		{ .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, .descriptorCount = frameInFlightCount },
 		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = frameInFlightCount },
-		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = frameInFlightCount + 3 }
+		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 2 * frameInFlightCount + 3 }
 	};
 
 	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -242,6 +246,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	// --------per frame in flight-------
 	// instance transform matrices
 	// sphere colors
+	// light sphere information
 	// ---------------------------------
 	// sizeof(VkAabbPositions): AABB position storage
 	// sizeof(PerVertexData) * m_triangleUniqueVertexCount: Vertex position storage
@@ -257,6 +262,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 		m_objectDataStagingStorage[i] = addSuballocation(stagingBufferInfo, sizeof(PerObjectData) * objectCount);
 		m_objectInstanceStagingStorage[i] =
 			addSuballocation(stagingBufferInfo, sizeof(VkAccelerationStructureInstanceKHR) * objectCount, 16);
+		m_lightStagingStorage[i] =
+			addSuballocation(stagingBufferInfo, sizeof(LightData) * m_emissiveSphereIndices.size());
 	}
 
 	m_aabbStagingStorage = addSuballocation(stagingBufferInfo, sizeof(VkAabbPositionsKHR));
@@ -306,6 +313,9 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 													sizeof(VkAccelerationStructureInstanceKHR) * objectCount, 16);
 
 		m_objectDataStorage[i] = addSuballocation(objectDataInfo, sizeof(PerObjectData) * objectCount);
+
+		m_lightDataStorage[i] = addSuballocation(objectDataInfo, sizeof(LightData) * m_emissiveSphereIndices.size()),
+		properties2.properties.limits.minStorageBufferOffsetAlignment;
 	}
 
 	m_normalDataStorage = addSuballocation(objectDataInfo, normalDataSize());
@@ -726,6 +736,7 @@ HardwareSphereRaytracer::~HardwareSphereRaytracer() {
 	vkDestroyPipeline(m_device.device(), m_pipeline, nullptr);
 	vkDestroyPipelineLayout(m_device.device(), m_pipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device.device(), m_descriptorSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device.device(), m_geometryDescriptorSetLayout, nullptr);
 }
 
 bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
@@ -786,20 +797,31 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 										.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 										.pImageInfo = &imageInfo };
 
-	VkDescriptorBufferInfo bufferInfo = { .buffer = m_objectDataBuffer.buffer,
-										  .offset = m_objectDataStorage[frameData.frameIndex].offset,
-										  .range = m_objectDataStorage[frameData.frameIndex].size };
-	VkWriteDescriptorSet bufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-										 .dstSet = m_descriptorSets[frameData.frameIndex],
-										 .dstBinding = 2,
-										 .dstArrayElement = 0,
-										 .descriptorCount = 1,
-										 .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-										 .pBufferInfo = &bufferInfo };
+	VkDescriptorBufferInfo colorBufferInfo = { .buffer = m_objectDataBuffer.buffer,
+											   .offset = m_objectDataStorage[frameData.frameIndex].offset,
+											   .range = m_objectDataStorage[frameData.frameIndex].size };
+	VkWriteDescriptorSet colorBufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+											  .dstSet = m_descriptorSets[frameData.frameIndex],
+											  .dstBinding = 2,
+											  .dstArrayElement = 0,
+											  .descriptorCount = 1,
+											  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+											  .pBufferInfo = &colorBufferInfo };
 
-	VkWriteDescriptorSet writes[] = { accelerationStructureWrite, imageWrite, bufferWrite };
+	VkDescriptorBufferInfo lightBufferInfo = { .buffer = m_objectDataBuffer.buffer,
+											   .offset = m_lightDataStorage[frameData.frameIndex].offset,
+											   .range = m_lightDataStorage[frameData.frameIndex].size };
+	VkWriteDescriptorSet lightBufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+											  .dstSet = m_descriptorSets[frameData.frameIndex],
+											  .dstBinding = 3,
+											  .dstArrayElement = 0,
+											  .descriptorCount = 1,
+											  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+											  .pBufferInfo = &lightBufferInfo };
 
-	vkUpdateDescriptorSets(m_device.device(), 3, writes, 0, nullptr);
+	VkWriteDescriptorSet writes[] = { accelerationStructureWrite, imageWrite, colorBufferWrite, lightBufferWrite };
+
+	vkUpdateDescriptorSets(m_device.device(), 4, writes, 0, nullptr);
 
 	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(0));
 
@@ -807,11 +829,15 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 
 	void* instanceDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
 														m_objectInstanceStagingStorage[frameData.frameIndex].offset);
-	void* sphereDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
+	void* objectDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
 													  m_objectDataStagingStorage[frameData.frameIndex].offset);
+	void* lightDataSection = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) +
+													 m_lightStagingStorage[frameData.frameIndex].offset);
+
 	std::vector<VkAccelerationStructureInstanceKHR> instances =
 		std::vector<VkAccelerationStructureInstanceKHR>(spheres.size() + m_triangleObjectCount);
 	std::vector<PerObjectData> objectData = std::vector<PerObjectData>(spheres.size() + m_triangleObjectCount);
+	std::vector<LightData> lightData = std::vector<LightData>(m_emissiveSphereIndices.size());
 	for (size_t i = 0; i < spheres.size(); ++i) {
 		instances[i] = { .transform = { .matrix = { { 2 * spheres[i].radius, 0.0f, 0.0f, spheres[i].position[0] },
 													{ 0.0f, 2 * spheres[i].radius, 0.0f, spheres[i].position[1] },
@@ -834,8 +860,13 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 		float color[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 		std::memcpy(objectData[spheres.size() + i].color, color, sizeof(float) * 4);
 	}
+	for (size_t i = 0; i < m_emissiveSphereIndices.size(); ++i) {
+		std::memcpy(lightData[i].position, spheres[m_emissiveSphereIndices[i]].position, 4 * sizeof(float));
+		lightData[i].radius = spheres[m_emissiveSphereIndices[i]].radius;
+	}
 	std::memcpy(instanceDataSection, instances.data(), instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
-	std::memcpy(sphereDataSection, objectData.data(), objectData.size() * sizeof(PerObjectData));
+	std::memcpy(objectDataSection, objectData.data(), objectData.size() * sizeof(PerObjectData));
+	std::memcpy(lightDataSection, lightData.data(), lightData.size() * sizeof(LightData));
 
 	VkBufferCopy instanceCopyRegion = { .srcOffset = m_objectInstanceStagingStorage[frameData.frameIndex].offset,
 										.dstOffset = m_instanceDataStorage[frameData.frameIndex].offset,
@@ -844,11 +875,14 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_accelerationStructureDataBuffer.buffer, 1,
 					&instanceCopyRegion);
 
-	VkBufferCopy dataCopyRegion = { .srcOffset = m_objectDataStagingStorage[frameData.frameIndex].offset,
-									.dstOffset = m_objectDataStorage[frameData.frameIndex].offset,
-									.size = m_objectDataStagingStorage[frameData.frameIndex].size };
+	VkBufferCopy dataCopyRegions[2] = { { .srcOffset = m_objectDataStagingStorage[frameData.frameIndex].offset,
+										  .dstOffset = m_objectDataStorage[frameData.frameIndex].offset,
+										  .size = m_objectDataStagingStorage[frameData.frameIndex].size },
+										{ .srcOffset = m_lightStagingStorage[frameData.frameIndex].offset,
+										  .dstOffset = m_lightDataStorage[frameData.frameIndex].offset,
+										  .size = m_lightStagingStorage[frameData.frameIndex].size } };
 
-	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_objectDataBuffer.buffer, 1, &dataCopyRegion);
+	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_objectDataBuffer.buffer, 2, dataCopyRegions);
 
 	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(1));
 

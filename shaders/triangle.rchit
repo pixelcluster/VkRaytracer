@@ -2,8 +2,17 @@
 
 #extension GL_EXT_ray_tracing : require
 
+struct LightData {
+	vec4 position;
+	float radius;
+};
+
 layout(std430, set = 0, binding = 2) buffer SphereBuffer {
 	vec4 colors[];
+};
+
+layout(std430, set = 0, binding = 3) buffer LightBuffer {
+	LightData lights[];
 };
 
 layout(std430, set = 1, binding = 2) buffer NormalBuffer {
@@ -74,12 +83,24 @@ float erfInvApprox(float x) {
 	}
 }
 
+
+
 //pretty much stolen from https://hal.inria.fr/file/index/docid/996995/filename/article.pdf
 //algorithm is in supplemental material at https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fcgf.12417&file=cgf12417-sup-0001-S1.pdf
 //
-vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, vec3 surfaceTangent1, vec3 surfaceTangent2, float alpha) {
+vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, float alpha) {
 	float U1 = nextRand() * uintBitsToFloat(0x2f800004U);
 	float U2 = nextRand() * uintBitsToFloat(0x2f800004U);
+
+	vec3 surfaceTangent1;
+	if(abs(normal.x) > abs(normal.y)) {
+		surfaceTangent1 = normalize(vec3(-normal.z, normal.x, 0.0f));
+	}
+	else {
+		surfaceTangent1 = normalize(vec3(normal.z, -normal.y, 0.0f));
+	}
+
+	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
 
 	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, surfaceTangent2), dot(incidentDir, normal));
 	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x * alpha, transformedIncidentDir.y, transformedIncidentDir.z * alpha));
@@ -134,6 +155,21 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, vec3 surfaceTan
 									surfaceTangent1.z, surfaceTangent2.z, normal.z);
 
 	return outgoingDir * shadingSpaceToWorld;
+}
+
+vec3 sampleSphere(vec3 hitOrigin, uint sphereIndex) {
+	LightData lightData = lights[sphereIndex];
+	vec3 originToCenter = lightData.position.xyz - hitOrigin;
+	if(dot(originToCenter, originToCenter) < lightData.radius * lightData.radius) {
+		float U1 = nextRand() * uintBitsToFloat(0x2f800004U);
+		float U2 = nextRand() * uintBitsToFloat(0x2f800004U);
+
+		float r = sqrt(max(U1 * (1.0f - U1), 0.0f));
+		return vec3(2.0f * cos(2.0f * PI * U2) * r, 2.0f * sin(2.0f * PI * U2) * r, U2 * 2.0f - 1.0f);
+	}
+	else {
+
+	}
 }
 
 void main() {

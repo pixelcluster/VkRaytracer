@@ -95,6 +95,7 @@ class HardwareSphereRaytracer {
 
 	BufferAllocation m_objectDataBuffer;
 	BufferSubAllocation m_objectDataStorage[frameInFlightCount];
+	BufferSubAllocation m_lightDataStorage[frameInFlightCount];
 	BufferSubAllocation m_normalDataStorage;
 
 	BufferAllocation m_shaderBindingTableBuffer;
@@ -109,6 +110,7 @@ class HardwareSphereRaytracer {
 
 	BufferSubAllocation m_objectDataStagingStorage[frameInFlightCount];
 	BufferSubAllocation m_objectInstanceStagingStorage[frameInFlightCount];
+	BufferSubAllocation m_lightStagingStorage[frameInFlightCount];
 
 	BufferSubAllocation m_aabbStagingStorage;
 	BufferSubAllocation m_vertexStagingStorage;

@@ -8,8 +8,16 @@ int main() {
 	glfwInit();
 
 	std::vector<Sphere> spheres = std::vector<Sphere>(50 * 50);
+	std::vector<size_t> lightSphereIndices = std::vector<size_t>(50 * 50 / 2);
 
-	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480, spheres.size(), {});
+	for(size_t i = 0, j = 0; i < 50 * 50 && j < 50 * 50 / 2; ++i) {
+		if(i  % 2) {
+			lightSphereIndices[j] = i;
+			++j;
+		}
+	}
+
+	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480, spheres.size(), { 0 });
 
 	for (size_t i = 0; i < 50; ++i) {
 		for (size_t j = 0; j < 50; ++j) {
@@ -30,6 +38,10 @@ int main() {
 											 .radius = 0.5f,
 											 .color = { static_cast<float>(fabs(sinf(floatIndex))), static_cast<float>(fabs(cosf(floatIndex))),
 														static_cast<float>(fabs(cosf(floatIndex) * sinf(floatIndex))), 0.5f } };
+				if((j + i * 50) % 2) {
+					//negative color.a indicates radiance
+					spheres[j + i * 50].color[3] = -50.0f;
+				}
 			}
 		}
 	}
