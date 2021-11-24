@@ -54,20 +54,101 @@ float beckmannLambdaApprox(vec3 wo, float tanTheta) {
 	return (1.0f - 1.259 * a + 0.396 * a * a) / (3.535 * a + 2.181 * a * a);
 }
 
-float beckmannG1(vec3 wo, vec3 wm, float tanTheta) {
+float smithG1(vec3 wo, vec3 wm, float tanTheta) {
 	if(dot(wo, wm) < 0) return 0.0f;
 	return 1.0f / (1.0f + beckmannLambdaApprox(wo, tanTheta));
 }
-float beckmannG1(vec3 wo, float tanTheta) {
+float smithG1(vec3 wo, float tanTheta) {
 	return 1.0f / (1.0f + beckmannLambdaApprox(wo, tanTheta));
 }
 
-//same as pbrt (sign trick stolen there), stolen from Handbook of Mathematical Functions (https://personal.math.ubc.ca/~cbm/aands/abramowitz_and_stegun.pdf) 7.1.26
+float beckmannD(float cos2Theta, float sin2Theta) {
+	float tan2Theta = sin2Theta / cos2Theta;
+
+	return exp(-tan2Theta / (alpha * alpha)) / (PI * alpha * alpha * cos2Theta * cos2Theta);
+}
+
+float fresnel(float cosThetaI) {
+	float sinThetaI = sqrt(max(1.0f - cosThetaI * cosThetaI, 0.0f));
+	float sinThetaT = eta_i * sinThetaI / eta_t;
+	float cosThetaT = sqrt(max(1.0f - sinThetaT * sinThetaT, 0.0f));
+
+	float rParallel = (eta_t * cosThetaI - eta_i * cosThetaT) / (eta_t * cosThetaI + eta_i * cosThetaT);
+	float rPerpendicular = (eta_i * cosThetaI - eta_t * cosThetaT) / (eta_i * cosThetaI + eta_t * cosThetaT);
+
+	return clamp((rParallel * rParallel + rPerpendicular * rPerpendicular) / 2.0f, 0.0f, 1.0f);
+}
+
+//equation from pbrt
+float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
+	vec3 surfaceTangent1;
+	if(abs(normal.x) > abs(normal.y)) {
+		surfaceTangent1 = normalize(vec3(-normal.z, normal.x, 0.0f));
+	}
+	else {
+		surfaceTangent1 = normalize(vec3(normal.z, -normal.y, 0.0f));
+	}
+
+	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
+
+	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
+	
+	float cosThetaI = transformedIncidentDir.y;
+	float fresnelFactor = fresnel(cosThetaI);
+
+	float cosTheta = dot(outgoingDir, normal);
+	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
+
+	vec3 microfacetNormal = outgoingDir + 0.5 * (outgoingDir - incidentDir);
+	float distribution = beckmannD(cosTheta * cosTheta, sinTheta * sinTheta);
+	float mask = smithG1(outgoingDir, microfacetNormal, dot(outgoingDir, normal));
+
+	return (fresnelFactor * distribution * mask) /(4 * cosThetaI * dot(outgoingDir, normal));
+}
+
+//from pbrt
+float randomMicrofacetBSDF(vec3 incidentDir, out vec3 outgoingDir, vec3 normal) {
+	vec3 surfaceTangent1;
+	if(abs(normal.x) > abs(normal.y)) {
+		surfaceTangent1 = normalize(vec3(-normal.z, normal.x, 0.0f));
+	}
+	else {
+		surfaceTangent1 = normalize(vec3(normal.z, -normal.y, 0.0f));
+	}
+
+	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
+
+	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
+	
+	float cosThetaI = transformedIncidentDir.y;
+	float fresnelFactor = fresnel(cosThetaI);
+
+	float logRandom = log(1.0f - (nextRand() * uintBitsToFloat(0x2f800004U)));
+	if(isinf(logRandom)) logRandom = 0;
+	float tan2Theta = -alpha * alpha * logRandom;
+	float phi = nextRand() * uintBitsToFloat(0x2f800004U) * 2.0f * PI;
+
+	float cosTheta = 1.0f / (sqrt(1.0 + tan2Theta));
+	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
+
+	vec3 microfacetNormal = vec3(sinTheta * cos(phi), cosTheta, -sinTheta * sin(phi));
+
+	outgoingDir = reflect(incidentDir, microfacetNormal);
+
+	float distribution = beckmannD(cosTheta * cosTheta, sinTheta * sinTheta);
+	float mask = smithG1(outgoingDir, microfacetNormal, dot(outgoingDir, normal));
+
+	return (fresnelFactor * distribution * mask) /(4 * cosThetaI * dot(outgoingDir, normal));
+}
+
+
+
+//same as pbrt (sign trick from there), algorithm from Handbook of Mathematical Functions (https://personal.math.ubc.ca/~cbm/aands/abramowitz_and_stegun.pdf) 7.1.26
 float erfApprox(float x) {
 	float sign = 1.0f - float(x < 0.0f) * 2.0f;
 	x = abs(x);
 	float t = 1.0f / (1.0f + 0.3275911f * x);
-	return sign * (1 - ((((1.06140f * t - 1.453152027f * t) + 1.421413741f * t) - 0.284496736f * t) + 0.254829592 * t)) * exp(-(x * x));
+	return sign * (1 - ((((1.06140f * t - 1.453152027f * t) + 1.421413741f * t) - 0.284496736f * t) + 0.254829592f * t)) * exp(-(x * x));
 }
 
 // code translated from https://people.maths.ox.ac.uk/gilesm/files/gems_erfinv.pdf
@@ -88,7 +169,7 @@ float erfInvApprox(float x) {
 //algorithm from https://hal.inria.fr/file/index/docid/996995/filename/article.pdf
 //algorithm is in supplemental material at https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fcgf.12417&file=cgf12417-sup-0001-S1.pdf
 //
-vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, float alpha) {
+vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal) {
 	float U1 = nextRand() * uintBitsToFloat(0x2f800004U);
 	float U2 = nextRand() * uintBitsToFloat(0x2f800004U);
 
@@ -102,7 +183,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, float alpha) {
 
 	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
 
-	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, surfaceTangent2), dot(incidentDir, normal));
+	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
 	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x * alpha, transformedIncidentDir.y, transformedIncidentDir.z * alpha));
 
 	float sinTheta = sqrt(max(1.0f - (scaledIncidentDir.y * scaledIncidentDir.y), 0.0f));
@@ -111,7 +192,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, float alpha) {
 
 	float erfCotTheta = erfApprox(cotTheta);
 
-	float c = beckmannG1(scaledIncidentDir, tanTheta) * erfCotTheta;
+	float c = smithG1(scaledIncidentDir, tanTheta) * erfCotTheta;
 
 	float x_m = 0.0f, z_m = 0.0f;
 
@@ -150,9 +231,9 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, float alpha) {
 	vec2 rotatedSlopes = vec2(x_m, z_m) * mat2(cosPhi, -sinPhi, sinPhi, cosPhi);
 
 	vec3 outgoingDir = normalize(vec3(rotatedSlopes * alpha, 1.0f));
-	mat3 shadingSpaceToWorld = mat3(surfaceTangent1.x, surfaceTangent2.x, normal.x,
-									surfaceTangent1.y, surfaceTangent2.y, normal.y,
-									surfaceTangent1.z, surfaceTangent2.z, normal.z);
+	mat3 shadingSpaceToWorld = mat3(surfaceTangent1.x, normal.x, -surfaceTangent2.x,
+									surfaceTangent1.y, normal.y, -surfaceTangent2.y,
+									surfaceTangent1.z, normal.z, -surfaceTangent2.z);
 
 	return outgoingDir * shadingSpaceToWorld;
 }
@@ -176,11 +257,11 @@ vec3 sampleSphere(vec3 hitOrigin, uint sphereIndex) {
 
 		float phi = U2 * 2 * PI;
 		float distanceToCenter = length(originToCenter);
-		float distanceToSamplePoint = distanceToCenter * cosTheta - sqrt(radius * radius - dot(originToCenter, originToCenter) * sinTheta * sinTheta);
+		float distanceToSamplePoint = distanceToCenter * cosTheta - sqrt(lightData.radius * lightData.radius - dot(originToCenter, originToCenter) * sinTheta * sinTheta);
 		float cosAlpha = (dot(originToCenter, originToCenter) + lightData.radius * lightData.radius - distanceToSamplePoint * distanceToSamplePoint) / 2 * distanceToCenter;
 		float sinAlpha = sqrt(max(1.0f - sinTheta, 0.0f));
 
-		return vec3(sinAlpha * cos(phi), sinAlpha * sin(phi), cosAlpha) + lightData.position;
+		return vec3(sinAlpha * cos(phi), sinAlpha * sin(phi), cosAlpha) * lightData.radius + lightData.position.xyz;
 	}
 }
 
@@ -204,27 +285,24 @@ void main() {
 	if(payload.recursionDepth++ < 8 && colors[gl_InstanceID].a < 0.99f) {
 		vec3 objectHitNormal = normals[gl_PrimitiveID].xyz;
 		vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
-		vec3 nextRayDir = normalize(reflect(gl_WorldRayDirectionEXT, objectHitNormal));
 
-		float cosThetaI = dot(objectHitNormal, normalize(gl_WorldRayDirectionEXT));
+		vec3 incomingRadiance = vec3(0.0f);
 
-		float sinThetaI = sqrt(max(1.0f - cosThetaI * cosThetaI, 0.0f));
-		float sinThetaT = eta_i * sinThetaI / eta_t;
-		float cosThetaT = sqrt(max(1.0f - sinThetaT * sinThetaT, 0.0f));
+		//Sample light
+		uint lightIndex = uint(nextRand() * uintBitsToFloat(0x2f800004U));
+		vec3 sampleDir = sampleSphere(hitPoint, lightIndex);
+		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.001f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+		incomingRadiance += microfacetBSDF(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal) * dot(gl_WorldRayDirectionEXT, objectHitNormal) * payload.color.rgb * lights.length();
 
-		float rParallel = (eta_t * cosThetaI - eta_i * cosThetaT) / (eta_t * cosThetaI + eta_i * cosThetaT);
-		float rPerpendicular = (eta_i * cosThetaI - eta_t * cosThetaT) / (eta_i * cosThetaI + eta_t * cosThetaT);
+		//Sample BSDF
+		lightIndex = uint(nextRand() * uintBitsToFloat(0x2f800004U));
+		float bsdfFactor = randomMicrofacetBSDF(hitPoint, sampleDir, objectHitNormal);
+		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.001f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+		incomingRadiance += bsdfFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal) * payload.color.rgb * lights.length();
 
-		float fresnelFactor = (rParallel * rParallel + rPerpendicular * rPerpendicular) / 2.0f;
-
-		if(sinThetaT > 1) {
-			fresnelFactor = 1.0f;
-		}
-
-		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.001f * nextRayDir, 0, nextRayDir, 999999999.0f, 0);
-		payload.color = vec4((fresnelFactor * colors[gl_InstanceID].rgb * payload.color.rgb) / cosThetaT, 1.0f);
+		payload.color = vec4(incomingRadiance, 1.0f);
 	}
 	else {
-		payload.color = vec4(colors[gl_InstanceID].rgb, 1.0f);
+		payload.color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 	}
 }
