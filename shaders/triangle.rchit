@@ -56,10 +56,12 @@ float beckmannLambdaApprox(vec3 wo, float tanTheta) {
 
 float smithG1(vec3 wo, vec3 wm, float tanTheta) {
 	if(dot(wo, wm) < 0) return 0.0f;
-	return 1.0f / (1.0f + beckmannLambdaApprox(wo, tanTheta));
+	if(beckmannLambdaApprox(wo, tanTheta) < 200000000000000.5f) 
+		return 0.0f;
+	return 1.0f;//1.0f / 1.0f + beckmannLambdaApprox(wo, tanTheta);
 }
 float smithG1(vec3 wo, float tanTheta) {
-	return 1.0f / (1.0f + beckmannLambdaApprox(wo, tanTheta));
+	return 1.0f;// / (1.0f + beckmannLambdaApprox(wo, tanTheta));
 }
 
 float beckmannD(float cos2Theta, float sin2Theta) {
@@ -105,42 +107,6 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 
 	return (fresnelFactor * distribution * mask) /(4 * cosThetaI * dot(outgoingDir, normal));
 }
-
-//from pbrt
-float randomMicrofacetBSDF(vec3 incidentDir, out vec3 outgoingDir, vec3 normal) {
-	vec3 surfaceTangent1;
-	if(abs(normal.x) > abs(normal.y)) {
-		surfaceTangent1 = normalize(vec3(-normal.z, normal.x, 0.0f));
-	}
-	else {
-		surfaceTangent1 = normalize(vec3(normal.z, -normal.y, 0.0f));
-	}
-
-	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
-
-	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
-	
-	float cosThetaI = transformedIncidentDir.y;
-	float fresnelFactor = fresnel(cosThetaI);
-
-	float logRandom = log(1.0f - (nextRand() * uintBitsToFloat(0x2f800004U)));
-	if(isinf(logRandom)) logRandom = 0;
-	float tan2Theta = -alpha * alpha * logRandom;
-	float phi = nextRand() * uintBitsToFloat(0x2f800004U) * 2.0f * PI;
-
-	float cosTheta = 1.0f / (sqrt(1.0 + tan2Theta));
-	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
-
-	vec3 microfacetNormal = vec3(sinTheta * cos(phi), cosTheta, -sinTheta * sin(phi));
-
-	outgoingDir = reflect(incidentDir, microfacetNormal);
-
-	float distribution = beckmannD(cosTheta * cosTheta, sinTheta * sinTheta);
-	float mask = smithG1(outgoingDir, microfacetNormal, dot(outgoingDir, normal));
-
-	return (fresnelFactor * distribution * mask) /(4 * cosThetaI * dot(outgoingDir, normal));
-}
-
 
 
 //same as pbrt (sign trick from there), algorithm from Handbook of Mathematical Functions (https://personal.math.ubc.ca/~cbm/aands/abramowitz_and_stegun.pdf) 7.1.26
@@ -239,6 +205,33 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal) {
 }
 
 //from pbrt
+float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
+	vec3 surfaceTangent1;
+	if(abs(normal.x) > abs(normal.y)) {
+		surfaceTangent1 = normalize(vec3(-normal.z, normal.x, 0.0f));
+	}
+	else {
+		surfaceTangent1 = normalize(vec3(normal.z, -normal.y, 0.0f));
+	}
+
+	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
+
+	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
+	
+	float cosThetaI = transformedIncidentDir.y;
+	float fresnelFactor = fresnel(cosThetaI);
+
+	float cosTheta = dot(outgoingDir, normal);
+	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
+
+	vec3 microfacetNormal = outgoingDir + 0.5 * (outgoingDir - incidentDir);
+	float distribution = beckmannD(cosTheta * cosTheta, sinTheta * sinTheta);
+	float mask = smithG1(outgoingDir, microfacetNormal, sinTheta / cosTheta);
+
+	return mask;//distribution * mask * abs(dot(outgoingDir, microfacetNormal)) / abs(dot(outgoingDir, normal));
+}
+
+//from pbrt
 vec3 sampleSphere(vec3 hitOrigin, uint sphereIndex) {
 	LightData lightData = lights[sphereIndex];
 	vec3 originToCenter = lightData.position.xyz - hitOrigin;
@@ -281,6 +274,10 @@ float pdfSphere(vec3 hitOrigin, uint sphereIndex) {
 	}
 }
 
+float powerHeuristic(float numBSDFSamples, float bsdfPdf, float numLightSamples, float lightPdf) {
+	return pow(numBSDFSamples * bsdfPdf, 2) / pow(numLightSamples * lightPdf, 2);
+}
+
 void main() {
 	if(payload.recursionDepth++ < 8 && colors[gl_InstanceID].a < 0.99f) {
 		vec3 objectHitNormal = normals[gl_PrimitiveID].xyz;
@@ -292,17 +289,20 @@ void main() {
 		uint lightIndex = uint(nextRand() * uintBitsToFloat(0x2f800004U));
 		vec3 sampleDir = sampleSphere(hitPoint, lightIndex);
 		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.001f * sampleDir, 0, sampleDir, 999999999.0f, 0);
-		incomingRadiance += microfacetBSDF(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal) * dot(gl_WorldRayDirectionEXT, objectHitNormal) * payload.color.rgb * lights.length();
+		float lightPdf = pdfSphere(hitPoint, lightIndex);
+		incomingRadiance += microfacetBSDF(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal) * dot(gl_WorldRayDirectionEXT, objectHitNormal) * payload.color.rgb * lights.length() / lightPdf;
 
 		//Sample BSDF
 		lightIndex = uint(nextRand() * uintBitsToFloat(0x2f800004U));
-		float bsdfFactor = randomMicrofacetBSDF(hitPoint, sampleDir, objectHitNormal);
+		sampleDir = sampleMicrofacetDistribution(hitPoint, objectHitNormal);
+		float bsdfFactor = microfacetBSDF(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
 		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.001f * sampleDir, 0, sampleDir, 999999999.0f, 0);
-		incomingRadiance += bsdfFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal) * payload.color.rgb * lights.length();
+		float bsdfPdf = pdfMicrofacet(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
+		incomingRadiance += bsdfFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal) * payload.color.rgb * lights.length() / bsdfPdf;
 
-		payload.color = vec4(incomingRadiance, 1.0f);
+		payload.color = vec4(/*incomingRadiance * powerHeuristic(1, bsdfPdf, 1, lightPdf)*/ bsdfPdf.xxx, 1.0f);
 	}
 	else {
-		payload.color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+		payload.color = vec4(1.0f, 0.0f, 0.0f, 1.0f);
 	}
 }
