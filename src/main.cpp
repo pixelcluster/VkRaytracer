@@ -17,7 +17,7 @@ int main() {
 		}
 	}
 
-	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480, spheres.size(), { 0 });
+	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480, spheres.size(), lightSphereIndices);
 
 	for (size_t i = 0; i < 50; ++i) {
 		for (size_t j = 0; j < 50; ++j) {

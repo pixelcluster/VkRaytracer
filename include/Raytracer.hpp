@@ -63,6 +63,7 @@ class HardwareSphereRaytracer {
 		float worldOffset[3];
 		float aspectRatio;
 		float tanHalfFov;
+		float time;
 	};
 
 	struct PerObjectData {
@@ -76,7 +77,6 @@ class HardwareSphereRaytracer {
 	struct LightData {
 		float position[4];
 		float radius;
-		float padding[3];
 	};
 
 	std::vector<size_t> m_emissiveSphereIndices;

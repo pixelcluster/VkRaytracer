@@ -59,8 +59,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 											 &m_geometryDescriptorSetLayout));
 
 	VkPushConstantRange constantRange = { .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-										  .offset = 0,
-										  .size = sizeof(float) * 5 };
+										  .offset = 0, .size = sizeof(PushConstantData) };
 
 	VkDescriptorSetLayout layouts[2] = { m_descriptorSetLayout, m_geometryDescriptorSetLayout };
 
@@ -312,13 +311,15 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 		m_instanceDataStorage[i] = addSuballocation(accelerationStructureDataInfo,
 													sizeof(VkAccelerationStructureInstanceKHR) * objectCount, 16);
 
-		m_objectDataStorage[i] = addSuballocation(objectDataInfo, sizeof(PerObjectData) * objectCount);
+		m_objectDataStorage[i] = addSuballocation(objectDataInfo, sizeof(PerObjectData) * objectCount,
+												  properties2.properties.limits.minStorageBufferOffsetAlignment);
 
-		m_lightDataStorage[i] = addSuballocation(objectDataInfo, sizeof(LightData) * m_emissiveSphereIndices.size()),
-		properties2.properties.limits.minStorageBufferOffsetAlignment;
+		m_lightDataStorage[i] = addSuballocation(objectDataInfo, sizeof(LightData) * m_emissiveSphereIndices.size(),
+		properties2.properties.limits.minStorageBufferOffsetAlignment);
 	}
 
-	m_normalDataStorage = addSuballocation(objectDataInfo, normalDataSize());
+	m_normalDataStorage = addSuballocation(
+		objectDataInfo, normalDataSize(), properties2.properties.limits.minStorageBufferOffsetAlignment);
 
 	m_aabbDataStorage = addSuballocation(accelerationStructureDataInfo, sizeof(VkAabbPositionsKHR),
 										 properties2.properties.limits.minStorageBufferOffsetAlignment,
@@ -956,7 +957,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	PushConstantData data = { .worldOffset = { m_worldPos[0], -m_worldPos[1], m_worldPos[2] },
 							  .aspectRatio = static_cast<float>(m_device.window().width()) /
 											 static_cast<float>(m_device.window().height()),
-							  .tanHalfFov = tanf((75.0f / 180.0f) * std::numbers::pi / 2.0f) };
+							  .tanHalfFov = tanf((75.0f / 180.0f) * std::numbers::pi / 2.0f),
+							  .time = static_cast<float>(glfwGetTime()) };
 	vkCmdPushConstants(frameData.commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0,
 					   sizeof(PushConstantData), &data);
 

@@ -21,7 +21,10 @@ const float eta_t = 1.06;
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 void main() {
-	if(payload.recursionDepth++ < 8 && colors[gl_InstanceID].a < 0.99f) {
+	if(colors[gl_InstanceID].a < 0.0f) {
+		payload.color = vec4(colors[gl_InstanceID].rgb * -colors[gl_InstanceID].a, 1.0f);
+	}
+	else if(payload.recursionDepth++ < 8 && colors[gl_InstanceID].a < 0.99f) {
 		vec3 objectHitNormal = normalize(gl_ObjectRayOriginEXT + gl_HitTEXT * gl_ObjectRayDirectionEXT);
 		vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
 
@@ -43,7 +46,7 @@ void main() {
 		vec3 nextRayDir = reflect(gl_WorldRayDirectionEXT, objectHitNormal);
 
 		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + nextRayDir * 0.001f, 0, nextRayDir, 999999999.0f, 0);
-		payload.color =  vec4((fresnelFactor * colors[gl_InstanceID].rgb * payload.color.rgb) / cosThetaT.xxx, 1.0f);
+		payload.color = vec4((fresnelFactor * colors[gl_InstanceID].rgb * payload.color.rgb) / cosThetaT.xxx, 0.0f);
 	}
 	else {
 		payload.color = vec4(colors[gl_InstanceID].rgb, 1.0f);
