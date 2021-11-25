@@ -811,7 +811,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 
 	VkDescriptorBufferInfo lightBufferInfo = { .buffer = m_objectDataBuffer.buffer,
 											   .offset = m_lightDataStorage[frameData.frameIndex].offset,
-											   .range = m_lightDataStorage[frameData.frameIndex].size };
+											   .range = m_emissiveSphereIndices.size() * sizeof(LightData) };
 	VkWriteDescriptorSet lightBufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 											  .dstSet = m_descriptorSets[frameData.frameIndex],
 											  .dstBinding = 3,
@@ -941,6 +941,16 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 													  .buffer = m_objectDataBuffer.buffer,
 													  .offset = m_objectDataStorage[frameData.frameIndex].offset,
 													  .size = m_objectDataStorage[frameData.frameIndex].size };
+	VkBufferMemoryBarrier lightDataMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+													  .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+													  .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+													  .srcQueueFamilyIndex = m_device.queueFamilyIndex(),
+													  .dstQueueFamilyIndex = m_device.queueFamilyIndex(),
+													  .buffer = m_objectDataBuffer.buffer,
+													  .offset = m_lightDataStorage[frameData.frameIndex].offset,
+													  .size = m_lightDataStorage[frameData.frameIndex].size };
+
+	VkBufferMemoryBarrier dataMemoryBarriers[2] = { objectDataMemoryBarrier, lightDataMemoryBarrier };
 
 	VkMemoryBarrier buildMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 										   .srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
@@ -949,8 +959,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdPipelineBarrier(frameData.commandBuffer,
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
 							 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_TRANSFER_BIT,
-						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &buildMemoryBarrier, 1,
-						 &objectDataMemoryBarrier, 1, &memoryBarrierBefore);
+						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &buildMemoryBarrier, 2,
+						 dataMemoryBarriers, 1, &memoryBarrierBefore);
 
 	vkCmdBindPipeline(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_pipeline);
 

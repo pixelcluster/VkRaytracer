@@ -77,6 +77,7 @@ class HardwareSphereRaytracer {
 	struct LightData {
 		float position[4];
 		float radius;
+		float padding[3];
 	};
 
 	std::vector<size_t> m_emissiveSphereIndices;
