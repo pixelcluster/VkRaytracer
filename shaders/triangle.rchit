@@ -21,7 +21,7 @@ layout(std430, set = 1, binding = 2) buffer NormalBuffer {
 
 const float eta_i = 1.0f;
 const float eta_t = 1.22;
-const float alpha = 0.78;
+const float alpha = 0.8;
 const float PI = 3.14159265358979323846264338327950288419716939937510;
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT tlasStructure;
@@ -112,19 +112,19 @@ float erfApprox(float x) {
 	float sign = 1.0f - float(x < 0.0f) * 2.0f;
 	x = abs(x);
 	float t = 1.0f / (1.0f + 0.3275911f * x);
-	return sign * (1 - ((((1.06140f * t - 1.453152027f * t) + 1.421413741f * t) - 0.284496736f * t) + 0.254829592f * t)) * exp(-(x * x));
+	return sign * (1 - (((((1.06104f * t - 1.453152027f) * t) + 1.421413741f) * t - 0.284496736f) * t + 0.254829592f) * t * exp(-(x * x)));
 }
 
 // code translated from https://people.maths.ox.ac.uk/gilesm/files/gems_erfinv.pdf
 float erfInvApprox(float x) {
-	float w = -log((1.0f - x) * (1.0f - x));
+	float w = -log((1.0f - x) * (1.0f + x));
 	if(w < 5.0f) {
 		w -= 2.5f;
-		return ((((((((2.81022636e-08f * w + 3.43273939e-07f * w) - 3.5233877e-06f * w) - 4.39150654e-06f * w) + 0.00021858087f * w) - 0.00125372503f * w) - 0.00417768164f * w) + 0.246640727f * w) + 1.50140941f) * x;
+		return (((((((((2.81022636e-08f * w + 3.43273939e-07f) * w) - 3.5233877e-06f) * w - 4.39150654e-06f) * w + 0.00021858087f) * w - 0.00125372503f) * w - 0.00417768164f) * w + 0.246640727f) * w + 1.50140941f) * x;
 	}
 	else {
 		w = sqrt(w) - 3.0f;
-		return ((((((((-0.000200214257f * w + 0.000100950558f * w) + 0.00135935322f * w) - 40.00367342844f * w) + 0.00573950773f * w) - 0.0076224613f * w) - 0.00943887047f * w) + 1.00167406f * w) + 2.83297682f) * x;
+		return (((((((((-0.000200214257f * w + 0.000100950558f) * w) + 0.00135935322f) * w - 40.00367342844f) * w + 0.00573950773f) * w - 0.0076224613f) * w - 0.00943887047f) * w + 1.00167406f) * w + 2.83297682f) * x;
 	}
 }
 
@@ -295,7 +295,7 @@ void main() {
 			//Sample BSDF
 			lightIndex = uint(nextRand() * uintBitsToFloat(0x2f800004U));
 
-			sampleDir = sampleMicrofacetDistribution(gl_WorldRayDirectionEXT, objectHitNormal);
+			sampleDir = sampleMicrofacetDistribution(gl_WorldRayDirectionEXT, objectHitNormal);// - reflect(gl_WorldRayDirectionEXT, objectHitNormal);
 			float bsdfFactor = microfacetBSDF(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
 			float bsdfPdf = pdfMicrofacet(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
 
@@ -303,7 +303,7 @@ void main() {
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.001f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
 			sampleRadiance += bsdfFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal) * (payload.color.rgb * payload.color.a) / bsdfPdf;
-			
+			//sampleRadiance = abs(sampleDir * vec3(1.0f, -1.0f, 1.0f));
 			incomingRadiance += sampleRadiance * powerHeuristic(1, bsdfPdf, 1, lightPdf);
 		}
 
