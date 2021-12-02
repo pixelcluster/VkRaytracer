@@ -4,7 +4,7 @@
 #include <vector>
 
 static constexpr bool enableDebugUtils = true;
-static constexpr bool enableValidation = true;
+static constexpr bool enableValidation = false;
 static constexpr uint32_t frameInFlightCount = 3;
 
 // Data provided to render one frame.

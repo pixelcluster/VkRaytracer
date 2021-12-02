@@ -17,13 +17,13 @@ int main() {
 		}
 	}
 
-	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480, spheres.size(), lightSphereIndices);
+	HardwareSphereRaytracer raytracer = HardwareSphereRaytracer(640, 480, spheres.size(), { 0, 104 });
 
 	for (size_t i = 0; i < 50; ++i) {
 		for (size_t j = 0; j < 50; ++j) {
-			float floatIndex = static_cast<float>(i) * 50.0f + static_cast<float>(j);
-			spheres[j + i * 50] = Sphere{ .position = { 2.0f * i, -2.0f, 2.0f * j, 1.0f },
-										 .radius = 0.5f,
+			float floatIndex = static_cast<float>(i) * 50.0f + static_cast<float>(j) + 0.8;
+			spheres[j + i * 50] = Sphere{ .position = { 2.0f * i, -20.0f, 2.0f * j, 1.0f },
+										 .radius = 2.0f,
 										 .color = { sinf(floatIndex) * 2.0f - 1.0f, cosf(floatIndex) * 2.0f - 1.0f,
 													cosf(floatIndex) * sinf(floatIndex) * 2.0f - 1.0f, 0.5f } };
 		}
@@ -32,15 +32,18 @@ int main() {
 	while (raytracer.update(spheres)) {
 		 for (size_t i = 0; i < 50; ++i) {
 			for (size_t j = 0; j < 50; ++j) {
-				float floatIndex = static_cast<float>(i) * 50.0f + static_cast<float>(j);
+				float floatIndex = static_cast<float>(i) * 50.0f + static_cast<float>(j) + 0.8;
 				float y = 2.0f + (j % 2 ? sinf(glfwGetTime() + j * 0.1) : cosf(glfwGetTime() + j * 0.1));
 				spheres[j + i * 50] = Sphere{ .position = { 2.0f * i, -y, 2.0f * j, 1.0f },
 											 .radius = 0.5f,
 											 .color = { static_cast<float>(fabs(sinf(floatIndex))), static_cast<float>(fabs(cosf(floatIndex))),
 														static_cast<float>(fabs(cosf(floatIndex) * sinf(floatIndex))), 0.5f } };
-				if((j + i * 50) % 2) {
+				if (j + i == 0 || (j + i * 50) == 104) { // if ((j + i * 50) % 2) {
 					//negative color.a indicates radiance
-					spheres[j + i * 50].color[3] = -50.0f;
+					spheres[j + i * 50].position[0] += 10.0f;
+					spheres[j + i * 50].position[1] -= 4.0f;
+					spheres[j + i * 50].position[2] += 10.0f;
+					spheres[j + i * 50].color[3] = -5000.0f;
 				}
 			}
 		}
