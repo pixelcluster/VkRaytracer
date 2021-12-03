@@ -420,7 +420,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 
 	void* triangleNormalsDataPointer =
 		reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_mappedStagingBuffer) + m_normalStagingStorage.offset);
-	float normals[2][4] = { { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } };
+	float normals[2][4] = { { 0.0f, -1.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f, 1.0f } };
 	std::memcpy(triangleNormalsDataPointer, normals, normalDataSize());
 
 	void* shaderBindingTablePointer =

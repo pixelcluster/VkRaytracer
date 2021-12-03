@@ -393,6 +393,7 @@ void main() {
 		payload.color = vec4(1.0f, 0.0f, 0.0f, 1.0f);
 
 		vec3 objectHitNormal = normalize(gl_ObjectRayOriginEXT + gl_HitTEXT * gl_ObjectRayDirectionEXT);
+		objectHitNormal *= vec3(1.0f, -1.0f, 1.0f);
 		vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
 
 		vec3 incomingRadiance = vec3(0.0f);
@@ -458,7 +459,6 @@ void main() {
 
 			if(lightPdf > 0.0f)
 				sampleRadiance += (bsdfFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal) * (payload.color.rgb * payload.color.a) / max(bsdfPdf, 0.00001f)) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
-			
 			incomingRadiance += sampleRadiance * lights.length();
 		}
 

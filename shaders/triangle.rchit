@@ -80,12 +80,12 @@ float beckmannD(float cos2Theta, float sin2Theta) {
 }
 
 float fresnel(float cosThetaI) {
-	float curEtaI = eta_t;
-	float curEtaT = eta_i;
+	float curEtaI = eta_i;
+	float curEtaT = eta_t;
 
 	if(cosThetaI < 0.0f) {
-		curEtaI = eta_i;
-		curEtaT = eta_t;
+		curEtaI = eta_t;
+		curEtaT = eta_i;
 		cosThetaI = -cosThetaI;
 	}
 
@@ -130,7 +130,7 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float distribution = beckmannD(cosTheta * cosTheta, sinTheta * sinTheta);
 	float mask = smithG(incidentDir, outgoingDir, normal);
 
-	return (fresnelFactor * distribution * mask) / (4 * cosThetaI * dot(outgoingDir, normal));
+	return outgoingDir.y;//(fresnelFactor * distribution * mask) / (4 * cosThetaI * dot(outgoingDir, normal));
 }
 
 
@@ -194,7 +194,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal) {
 
 	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
 
-	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
+	vec3 transformedIncidentDir = -vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
 	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x * alpha, transformedIncidentDir.y, transformedIncidentDir.z * alpha));
 
 	float sinTheta = sqrt(max(1.0f - (scaledIncidentDir.y * scaledIncidentDir.y), 0.0f));
@@ -203,8 +203,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal) {
 
 	float erfCotTheta = erfApprox(cotTheta);
 
-	float c = smithG1(scaledIncidentDir, tanTheta) * erfCotTheta;
-
+	float c = smithG1(normalize(scaledIncidentDir), tanTheta) * erfCotTheta;
 	float x_m = 1.0f, z_m = 0.0f;
 
 	if(U1 <= c) {
@@ -241,61 +240,6 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal) {
 									surfaceTangent1.z, normal.z, -surfaceTangent2.z);
 
 	return normalize((vec3(x_m, 1.0f, z_m) * shadingSpaceToWorld) * alpha);
-}
-
-vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, float U1, float U2, float r) {
-	vec3 surfaceTangent1;
-	if(abs(normal.x) > abs(normal.y)) {
-		surfaceTangent1 = normalize(vec3(-normal.y, normal.x, 0.0f));
-	}
-	else {
-		surfaceTangent1 = normalize(vec3(normal.y, -normal.z, 0.0f));
-	}
-
-	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
-
-	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
-	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x * alpha, transformedIncidentDir.y, transformedIncidentDir.z * alpha));
-
-	float sinTheta = sqrt(max(1.0f - (scaledIncidentDir.y * scaledIncidentDir.y), 0.0f));
-	float tanTheta = (sinTheta / scaledIncidentDir.y);
-	float cotTheta = 1.0f / tanTheta;
-
-	float erfCotTheta = erfApprox(cotTheta);
-
-	float c = smithG1(scaledIncidentDir, tanTheta) * erfCotTheta;
-
-	float x_m = 1.0f, z_m = 0.0f;
-
-	if(U1 <= c) {
-		U1 /= c;
-		float omega_1 = sinTheta / (2.0f * sqrt(PI)) * exp(-cotTheta * cotTheta);
-		float omega_2 = scaledIncidentDir.y * (0.5f - 0.5f * erfCotTheta);
-
-		float p = omega_1 / (omega_1 + omega_2);
-		if(U1 <= p) {
-			U1 /= p;
-			x_m = -sqrt(-log(U1 * exp(-cotTheta * cotTheta)));
-		}
-		else {
-			U1 = (U1 - p) / (1.0f - p);
-			x_m = erfInvApprox(U1 - 1.0f - U1 * erfCotTheta);
-		}
-	}
-	else {
-		U1 = (U1 - c) / (1.0f - c);
-		x_m = erfInvApprox((-1.0f + 2.0f * U1) * erfCotTheta);
-		float p = (-x_m * sinTheta + scaledIncidentDir.y) / (2.0f * scaledIncidentDir.y);
-		if(U2 > p) {
-			U2 = (U2 - p) / (1.0f - p);
-			x_m *= -1.0f;
-		}
-		else
-			U2 /= p;
-	}
-
-	z_m = erfInvApprox(2 * U2 - 1.0f);
-	return normalize(vec3(x_m, 1.0f, z_m)) * alpha * r;
 }
 
 //from pbrt
@@ -383,7 +327,7 @@ float powerHeuristic(float numBSDFSamples, float bsdfPdf, float numLightSamples,
 	return pow(numBSDFSamples * bsdfPdf, 2) / (pow(numBSDFSamples * bsdfPdf, 2) + pow(numLightSamples * lightPdf, 2));
 }
 
-const uint nSamples = 16;
+const uint nSamples = 1;
 const float sampleDelta = 0.01;
 
 void main() {
@@ -400,7 +344,7 @@ void main() {
 		for(uint i = 0; i < nSamples; ++i) {
 			vec3 sampleRadiance = vec3(0.0f);
 
-			uint lightIndex = min(uint(nextRand() * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length() - 1);
+			uint lightIndex = min(uint(nextRand() * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
 			vec3 sampleDir;
 			float lightPdf;
 			
@@ -416,7 +360,6 @@ void main() {
 			float lightBSDFFactor = microfacetBSDF(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
 			float bsdfPdf = pdfMicrofacet(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
 
-			sampleDir.y *= -1.0f;
 			payload.recursionDepth = 8;
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
@@ -439,7 +382,7 @@ void main() {
 
 			lightPdf = pdfSphere(hitPoint, sampleDir, lightIndex);
 			
-			sampleDir.y *= -1.0f;
+			//sampleDir.y *= -1.0f;
 			payload.recursionDepth = 8;
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
@@ -455,9 +398,9 @@ void main() {
 
 			payload.color.a = max(payload.color.a, 0.0f);
 
-			if(lightPdf > 0.0f)
-				sampleRadiance += (bsdfFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal) * (payload.color.rgb * payload.color.a) / max(bsdfPdf, 0.00001f)) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
-			
+			//if(lightPdf > 0.0f)
+				//sampleRadiance += (bsdfFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal) * (payload.color.rgb * payload.color.a) / max(bsdfPdf, 0.00001f)) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
+			sampleRadiance = bsdfPdf.xxx;
 			incomingRadiance += sampleRadiance * lights.length();
 		}
 
