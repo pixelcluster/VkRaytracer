@@ -34,6 +34,7 @@ target_link_libraries(VkRaytracer glfw volk::volk)
 file(GLOB SHADERS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 
+list(FILTER SHADERS EXCLUDE REGEX ".*\.glsl")
 
 foreach(SHADER IN LISTS SHADERS)
 	get_filename_component(FILENAME ${SHADER} NAME_WLE)
