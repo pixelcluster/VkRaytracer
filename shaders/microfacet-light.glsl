@@ -6,8 +6,10 @@
 
 //equations are from https://hal.inria.fr/hal-01024289/file/Heitz2014Microfacet.pdf
 float beckmannLambdaApprox(float tanTheta) {
-	if(isnan(tanTheta))
+	if(isnan(tanTheta)) {
+//		debugPrintfEXT("NaN in lambda!\n");
 		return 0.0f;
+	}
 	float a = 1.0f / (alpha * abs(tanTheta));
 	if(a >= 1.6f) return 0.0f;
 	return (1.0 - 1.259 * a + 0.396 * a * a) / (3.535 * a + 2.181 * a * a);
@@ -27,7 +29,15 @@ float smithG(vec3 wi, vec3 wo, vec3 normal) {
 	float sinThetaIn = sqrt(max(1.0f - cosThetaIn * cosThetaIn, 0.0f));
 	float cosThetaOut = dot(wo, normal);
 	float sinThetaOut = sqrt(max(1.0f - cosThetaOut * cosThetaOut, 0.0f));
-	return 1.0f / (1.0f + beckmannLambdaApprox(sinThetaIn / cosThetaIn) + beckmannLambdaApprox(sinThetaOut / cosThetaOut));
+	float tanThetaIn = sinThetaIn / cosThetaIn;
+	float tanThetaOut = sinThetaOut / cosThetaOut;
+	if(abs(cosThetaIn) < 1.e-5f) {
+		tanThetaIn = 0.0f;
+	}
+	if(abs(cosThetaOut) < 1.e-5f) {
+		tanThetaOut = 0.0f;
+	}
+	return 1.0f / (1.0f + beckmannLambdaApprox(tanThetaIn) + beckmannLambdaApprox(tanThetaOut));
 }
 
 float beckmannD(float cos2Theta, float sin2Theta) {
@@ -48,7 +58,7 @@ float erfApprox(float x) {
 
 // code translated from https://people.maths.ox.ac.uk/gilesm/files/gems_erfinv.pdf
 float erfInvApprox(float x) {
-	x = clamp(x, -0.9999999999f, 0.99999999999f); //prevent values to be out of bounds by floating-point error
+	x = clamp(x, -0.99f, 0.99f); //prevent values to be out of bounds by floating-point error
 	float w = -log((1.0f - x) * (1.0f + x));
 	if(w < 5.0f) {
 		w -= 2.5f;
@@ -61,8 +71,7 @@ float erfInvApprox(float x) {
 }
 
 //equation from pbrt
-float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
-
+float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, inout vec3 normal) {
 	vec3 surfaceTangent1;
 	if(abs(normal.x) > abs(normal.y)) {
 		surfaceTangent1 = normalize(vec3(-normal.z, normal.x, 0.0f));
@@ -128,12 +137,15 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 		float omega_2 = scaledIncidentDir.y * (0.5f - 0.5f * erfCotTheta);
 
 		float p = omega_1 / (omega_1 + omega_2);
+
 		if(U1 <= p) {
-			U1 /= p;
-			x_m = -sqrt(-log(U1 * exp(-cotTheta * cotTheta)));
+			if(p > 0.0f)
+				U1 /= p;
+			x_m = -sqrt(-log(max(U1 * exp(-cotTheta * cotTheta), 0.00001f)));
 		}
 		else {
-			U1 = (U1 - p) / (1.0f - p);
+			if(p < 1.0f)
+				U1 = (U1 - p) / (1.0f - p);
 			x_m = erfInvApprox(U1 - 1.0f - U1 * erfCotTheta);
 		}
 	}
@@ -155,7 +167,9 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 									surfaceTangent1.y, normal.y, -surfaceTangent2.y,
 									surfaceTangent1.z, normal.z, -surfaceTangent2.z);
 
-	return normalize((vec3(x_m, 1.0f, z_m) * shadingSpaceToWorld) * alpha);
+	normal = (vec3(x_m, 1.0f, z_m) * shadingSpaceToWorld) * alpha;
+
+	return normalize(normal);
 }
 
 //from pbrt
@@ -173,15 +187,19 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
 	
 	float cosThetaI = transformedIncidentDir.y;
-	float fresnelFactor = fresnel(cosThetaI);
 
 	vec3 microfacetNormal = normalize(incidentDir + 0.5 * (outgoingDir - incidentDir));
-
-	float cosTheta = dot(outgoingDir, microfacetNormal);
+	float cosTheta = abs(dot(outgoingDir, normal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
-	float distribution = beckmannD(cosTheta * cosTheta, sinTheta * sinTheta);
-	float mask = smithG(incidentDir, outgoingDir, microfacetNormal);
+	float cosThetaMicrofacet = abs(dot(outgoingDir, microfacetNormal));
+
+	float cosThetaNormal = dot(microfacetNormal, normal);
+	float sinThetaNormal = sqrt(max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f));
+	
+	float fresnelFactor = fresnel(cosTheta);
+	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal * sinThetaNormal);
+	float mask = smithG(incidentDir, outgoingDir, normal);
 
 	return fresnelFactor * distribution * mask * abs(dot(outgoingDir, microfacetNormal)) / abs(dot(outgoingDir, normal));
 }

@@ -27,7 +27,8 @@ vec3 sampleHemisphereUniform(vec3 normal, inout uint randomState) {
 									surfaceTangent1.y, normal.y, -surfaceTangent2.y,
 									surfaceTangent1.z, normal.z, -surfaceTangent2.z);
 
-	return vec3(cos(2 * PI * U2) * sqrt(1.0f - U1 * U1), U1, -sin(2 * PI * U2) * sqrt(1.0f - U1 * U1)) * shadingSpaceToWorld;
+	float m = sqrt(max(1.0f - U1 * U1, 0.0f));
+	return vec3(cos(2 * PI * U2) * m, U1, -sin(2 * PI * U2) * m) * shadingSpaceToWorld;
 }
 
 //from pbrt
@@ -49,7 +50,7 @@ vec3 sampleSphere(vec3 hitOrigin, LightData lightData, inout uint randomState) {
 
 		float phi = U2 * 2 * PI;
 		float distanceToCenter = length(originToCenter);
-		float distanceToSamplePoint = distanceToCenter * cosTheta - sqrt(lightData.radius * lightData.radius - dot(originToCenter, originToCenter) * sinTheta * sinTheta);
+		float distanceToSamplePoint = distanceToCenter * cosTheta - sqrt(max(lightData.radius * lightData.radius - dot(originToCenter, originToCenter) * sinTheta * sinTheta, 0.0f));
 		float cosAlpha = (dot(originToCenter, originToCenter) + lightData.radius * lightData.radius - distanceToSamplePoint * distanceToSamplePoint) / (2 * distanceToCenter * lightData.radius);
 		float sinAlpha = sqrt(max(1.0f - cosAlpha * cosAlpha, 0.0f));
 
