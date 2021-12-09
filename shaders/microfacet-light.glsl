@@ -6,7 +6,9 @@
 
 //equations are from https://hal.inria.fr/hal-01024289/file/Heitz2014Microfacet.pdf
 float beckmannLambdaApprox(float tanTheta) {
-	float a = 1.0f / (alpha * tanTheta);
+	if(isnan(tanTheta))
+		return 0.0f;
+	float a = 1.0f / (alpha * abs(tanTheta));
 	if(a >= 1.6f) return 0.0f;
 	return (1.0 - 1.259 * a + 0.396 * a * a) / (3.535 * a + 2.181 * a * a);
 }
@@ -84,7 +86,7 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosThetaNormal = dot(microfacetNormal, normal);
 	float sinThetaNormal = sqrt(max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f));
 	
-	float fresnelFactor = fresnel(cosThetaMicrofacet);
+	float fresnelFactor = fresnel(cosTheta);
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal * sinThetaNormal);
 	float mask = smithG(incidentDir, outgoingDir, normal);
 

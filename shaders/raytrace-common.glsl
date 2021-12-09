@@ -51,7 +51,7 @@ vec3 weightBSDFLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 ob
 		return 0.0f.xxx;
 }
 
-vec3 weightBSDFEnvmap(vec3 hitPoint, vec3 objectHitNormal, vec3 sampleDir, vec4 radiance) {
+vec3 weightBSDFEnvmap(vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 radiance) {
 	float bsdfFactor = microfacetBSDF(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
 	float bsdfPdf = pdfMicrofacet(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
 

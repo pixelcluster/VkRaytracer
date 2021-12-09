@@ -33,7 +33,7 @@ void main() {
 	if(colors[gl_InstanceID].a < 0.0f) {
 		payload.color = vec4(colors[gl_InstanceID].rgb * -colors[gl_InstanceID].a, 1.0f);
 	}
-	else if(payload.recursionDepth++ < 8 && colors[gl_InstanceID].a < 0.99f) {
+	else if(payload.recursionDepth++ < 8) {
 		payload.color = vec4(1.0f, 0.0f, 0.0f, 1.0f);
 
 		vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
@@ -58,7 +58,7 @@ void main() {
 			}
 
 			payload.recursionDepth = 8;
-			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.001f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 			sampleRadiance += weightLight(lightIndex == lights.length(), lights[max(lightIndex, lights.length() - 1)], hitPoint, sampleDir, objectHitNormal, payload.color);
 
 			//Sample BSDF
