@@ -46,18 +46,19 @@ void main() {
 			//Sample light
 			uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
 			//lightIndex == lights.length(): sample sky envmap
+			LightData lightData = LightData(vec4(0.0f), 0.0f);
 			if(lightIndex == lights.length()) {
 				sampleDir = sampleHemisphereUniform(objectHitNormal, payload.randomState);
 			}
 			else {
-				LightData lightData = lights[lightIndex];
+				lightData = lights[lightIndex];
 				sampleDir = sampleSphere(hitPoint, lightData, payload.randomState);
 			}
 
 			payload.recursionDepth = 8;
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-			sampleRadiance += weightLight(lightIndex == lights.length(), lights[max(lightIndex, lights.length() - 1)], hitPoint, sampleDir, objectHitNormal, payload.color);
+			sampleRadiance += weightLight(lightIndex == lights.length(), lightData, hitPoint, sampleDir, objectHitNormal, payload.color);
 
 			//Sample BSDF
 			
@@ -67,12 +68,12 @@ void main() {
 			payload.recursionDepth = 8;
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 			
-			if(lightIndex == lights.length())
+			/*if(lightIndex == lights.length())
 				sampleRadiance += weightBSDFEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);
 			else
-				sampleRadiance += weightBSDFLight(lights[lightIndex], hitPoint, sampleDir, objectHitNormal, payload.color);
+				sampleRadiance += weightBSDFLight(lights[lightIndex], hitPoint, sampleDir, objectHitNormal, payload.color);*/
 
-			incomingRadiance += sampleRadiance * lights.length();
+			incomingRadiance += sampleRadiance;// * lights.length();
 		}
 
 		incomingRadiance /= nSamples;

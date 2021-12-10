@@ -32,7 +32,6 @@ vec3 weightLight(bool sampledHemisphere, LightData lightData, vec3 hitPoint, vec
 		lightPdf = pdfSphere(hitPoint, sampleDir, lightData);
 	}
 
-
 	if(lightPdf <= 0.0f || dot(sampleDir, objectHitNormal) < 0.0f) {
 		return vec3(0.0f);
 	}
