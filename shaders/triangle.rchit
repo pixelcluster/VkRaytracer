@@ -4,8 +4,8 @@
 #extension GL_EXT_debug_printf : enable
 #extension GL_GOOGLE_include_directive : require
 
-const float eta_i = 1.22f;
-const float eta_t = 1.0;
+const float eta_i = 1.0f;
+const float eta_t = 1.22;
 const float alpha = 0.8;
 
 #define USE_FRESNEL
@@ -44,7 +44,7 @@ void main() {
 			vec3 sampleDir;
 
 			//Sample light
-			uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
+			uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length() - 1);
 			//lightIndex == lights.length(): sample sky envmap
 			LightData lightData = LightData(vec4(0.0f), 0.0f);
 			if(lightIndex == lights.length()) {

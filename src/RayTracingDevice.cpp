@@ -182,7 +182,7 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		deviceExtensionNames.reserve(1);
 	}
 	deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-	/* deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
+	/*deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
 	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);*/
 
 	VkDeviceDiagnosticsConfigFlagsNV aftermathFlags =

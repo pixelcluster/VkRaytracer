@@ -16,7 +16,7 @@ vec3 weightLight(bool sampledHemisphere, LightData lightData, vec3 hitPoint, vec
 		debugPrintfEXT("NaN in sampleDir light!\n");
 	}
 	float bsdfPdf = pdfMicrofacet(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
-	float lightBSDFFactor = microfacetBSDF(gl_WorldRayDirectionEXT, sampleDir, objectHitNormal);
+	float lightBSDFFactor = microfacetBSDF(sampleDir, gl_WorldRayDirectionEXT, objectHitNormal);
 	float lightPdf;
 
 	if(sampledHemisphere) {
@@ -36,6 +36,8 @@ vec3 weightLight(bool sampledHemisphere, LightData lightData, vec3 hitPoint, vec
 		return vec3(0.0f);
 	}
 
+	if(lightBSDFFactor < 0.0f) return vec3(0.0f);
+
 	return (abs(lightBSDFFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal)) * (radiance.rgb * radiance.a) / lightPdf) * powerHeuristic(1, lightPdf, 1, bsdfPdf);
 }
 
@@ -49,9 +51,9 @@ vec3 weightBSDFLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 ob
 	float lightPdf = pdfSphere(hitPoint, sampleDir, lightData);
 	//todo: NEE should discard the ray even if a different light than the chosen one was hit
 	radiance.a = max(radiance.a, 0.0f); //zero radiance if ray didn't hit light
-	if(lightPdf > 0.0f && dot(sampleDir, objectHitNormal) > 0.0f)
+	/*if(lightPdf > 0.0f && dot(sampleDir, objectHitNormal) > 0.0f)
 		return (bsdfFactor * dot(gl_WorldRayDirectionEXT, objectHitNormal) * (radiance.rgb * radiance.a) / bsdfPdf) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
-	else
+	else*/
 		return 0.0f.xxx;
 }
 

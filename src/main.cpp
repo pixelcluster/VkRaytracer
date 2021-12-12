@@ -32,8 +32,11 @@ int main() {
 	while (raytracer.update(spheres)) {
 		 for (size_t i = 0; i < 15; ++i) {
 			for (size_t j = 0; j < 15; ++j) {
+				 double time = 0.f;
+				 //glfwGetTime();
+
 				float floatIndex = static_cast<float>(i) * 15.0f + static_cast<float>(j) + 0.8;
-				float y = 2.0f + (j % 2 ? sinf(glfwGetTime() + j * 0.1) : cosf(glfwGetTime() + j * 0.1));
+				float y = 0.5f /* + (j % 2 ? sinf(time + j * 0.1) : cosf(time + j * 0.1))*/;
 				spheres[j + i * 15] = Sphere{ .position = { 2.0f * i, -y, 2.0f * j, 1.0f },
 											 .radius = 0.5f,
 											 .color = { static_cast<float>(fabs(sinf(floatIndex))), static_cast<float>(fabs(cosf(floatIndex))),
@@ -43,7 +46,7 @@ int main() {
 					spheres[j + i * 15].position[0] += 10.0f;
 					spheres[j + i * 15].position[1] -= 4.0f;
 					spheres[j + i * 15].position[2] += 10.0f;
-					spheres[j + i * 15].color[3] = -50000.0f;
+					spheres[j + i * 15].color[3] = -5000.0f;
 				}
 			}
 		}

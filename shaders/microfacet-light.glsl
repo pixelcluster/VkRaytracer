@@ -7,7 +7,6 @@
 //equations are from https://hal.inria.fr/hal-01024289/file/Heitz2014Microfacet.pdf
 float beckmannLambdaApprox(float tanTheta) {
 	if(isnan(tanTheta)) {
-//		debugPrintfEXT("NaN in lambda!\n");
 		return 0.0f;
 	}
 	float a = 1.0f / (alpha * abs(tanTheta));
@@ -43,7 +42,7 @@ float smithG(vec3 wi, vec3 wo, vec3 normal) {
 float beckmannD(float cos2Theta, float sin2Theta) {
 	float tan2Theta = sin2Theta / cos2Theta;
 	if(isinf(tan2Theta)) return 0.0f;
-
+	return sqrt(cos2Theta);
 	return exp(-tan2Theta / (alpha * alpha)) / (PI * alpha * alpha * cos2Theta * cos2Theta);
 }
 
@@ -85,17 +84,20 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, inout vec3 normal) {
 	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
 	
 	float cosThetaI = abs(transformedIncidentDir.y);
-	vec3 microfacetNormal = normalize(outgoingDir + 0.5 * (outgoingDir - incidentDir));
+
+	vec3 microfacetNormal = (outgoingDir + incidentDir);
+	if(dot(microfacetNormal, microfacetNormal) < 1.e-5) return 0.0f;
+	microfacetNormal = normalize(microfacetNormal);
 
 	float cosTheta = abs(dot(outgoingDir, normal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
 	float cosThetaMicrofacet = abs(dot(outgoingDir, microfacetNormal));
 
-	float cosThetaNormal = dot(microfacetNormal, normal);
+	float cosThetaNormal = clamp(dot(microfacetNormal, normal), 0.0f, 1.0f);
 	float sinThetaNormal = sqrt(max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f));
 	
-	float fresnelFactor = fresnel(cosTheta);
+	float fresnelFactor = fresnel(dot(incidentDir, microfacetNormal));
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal * sinThetaNormal);
 	float mask = smithG(incidentDir, outgoingDir, normal);
 
@@ -187,21 +189,23 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
 	
 	float cosThetaI = transformedIncidentDir.y;
+	
+	vec3 microfacetNormal = (outgoingDir + incidentDir);
+	if(dot(microfacetNormal, microfacetNormal) < 1.e-5) return 0.0f;
+	microfacetNormal = normalize(microfacetNormal);
 
-	vec3 microfacetNormal = normalize(incidentDir + 0.5 * (outgoingDir - incidentDir));
 	float cosTheta = abs(dot(outgoingDir, normal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
 	float cosThetaMicrofacet = abs(dot(outgoingDir, microfacetNormal));
 
 	float cosThetaNormal = dot(microfacetNormal, normal);
-	float sinThetaNormal = sqrt(max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f));
+	float sinThetaNormal2 = max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f);
 	
-	float fresnelFactor = fresnel(cosTheta);
-	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal * sinThetaNormal);
-	float mask = smithG(incidentDir, outgoingDir, normal);
+	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);
+	float mask = smithG1(outgoingDir, sinTheta / cosTheta);
 
-	return fresnelFactor * distribution * mask * abs(dot(outgoingDir, microfacetNormal)) / abs(dot(outgoingDir, normal));
+	return distribution * mask * abs(dot(outgoingDir, microfacetNormal)) / abs(dot(outgoingDir, normal));
 }
 
 #endif
