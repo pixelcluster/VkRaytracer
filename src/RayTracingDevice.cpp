@@ -134,7 +134,7 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 			VkBool32 surfaceSupport;
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &surfaceSupport);
 
-			if ((properties.queueFlags & VK_QUEUE_COMPUTE_BIT) && surfaceSupport) {
+			if ((properties.queueFlags & VK_QUEUE_COMPUTE_BIT) && (properties.queueFlags & VK_QUEUE_GRAPHICS_BIT) && surfaceSupport) {
 				deviceQueueCreateInfo = { .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
 										  .queueFamilyIndex = static_cast<uint32_t>(i),
 										  .queueCount = 1,
@@ -379,6 +379,7 @@ FrameData RayTracingDevice::beginFrame() {
 							{ static_cast<uint32_t>(m_window.width()), static_cast<uint32_t>(m_window.height()) },
 							m_swapchain, enableDebugUtils);
 		createSwapchainResources();
+		m_shouldNotifySizeChange = true;
 	}
 
 	VkResult acquireResult = vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
@@ -394,6 +395,7 @@ FrameData RayTracingDevice::beginFrame() {
 							{ static_cast<uint32_t>(m_window.width()), static_cast<uint32_t>(m_window.height()) },
 							m_swapchain, enableDebugUtils);
 		createSwapchainResources();
+		m_shouldNotifySizeChange = true;
 		return FrameData{};
 	} else if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_isSwapchainGood = false;
@@ -413,11 +415,14 @@ FrameData RayTracingDevice::beginFrame() {
 										   .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 	verifyResult(vkBeginCommandBuffer(m_perFrameData[m_currentFrameIndex].commandBuffer, &beginInfo));
 
-	return FrameData{ .commandBuffer = m_perFrameData[m_currentFrameIndex].commandBuffer,
-					  .swapchainImage = m_swapchainImages[m_currentImageIndex],
-					  .swapchainImageView = m_swapchainViews[m_currentImageIndex],
-					  .swapchainImageIndex = m_currentImageIndex,
-					  .frameIndex = m_currentFrameIndex };
+	FrameData data = FrameData{ .commandBuffer = m_perFrameData[m_currentFrameIndex].commandBuffer,
+								.swapchainImage = m_swapchainImages[m_currentImageIndex],
+								.swapchainImageView = m_swapchainViews[m_currentImageIndex],
+								.swapchainImageIndex = m_currentImageIndex,
+								.frameIndex = m_currentFrameIndex };
+	data.windowSizeChanged = m_shouldNotifySizeChange;
+	m_shouldNotifySizeChange = false;
+	return data;
 }
 
 bool RayTracingDevice::endFrame() {
@@ -455,6 +460,7 @@ bool RayTracingDevice::endFrame() {
 							{ static_cast<uint32_t>(m_window.width()), static_cast<uint32_t>(m_window.height()) },
 							m_swapchain, enableDebugUtils);
 		createSwapchainResources();
+		m_shouldNotifySizeChange = true;
 	} else if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_isSwapchainGood = false;
 	}

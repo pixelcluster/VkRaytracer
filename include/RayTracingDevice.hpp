@@ -15,6 +15,8 @@ struct FrameData {
 	VkImageView swapchainImageView = VK_NULL_HANDLE;
 	uint32_t swapchainImageIndex = 0;
 	uint32_t frameIndex = 0;
+
+	bool windowSizeChanged = false;
 };
 
 
@@ -74,6 +76,7 @@ class RayTracingDevice {
 	VkSurfaceKHR m_surface;
 	VkSwapchainKHR m_swapchain;
 	bool m_isSwapchainGood = true;
+	bool m_shouldNotifySizeChange = false;
 	std::vector<VkImageView> m_swapchainViews;
 	std::vector<VkImage> m_swapchainImages;
 

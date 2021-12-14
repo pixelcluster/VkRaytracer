@@ -12,11 +12,11 @@ const float alpha = 0.8;
 #define USE_WEIGHTING
 #include "raytrace-common.glsl"
 
-layout(std430, set = 0, binding = 2) buffer SphereBuffer {
+layout(std430, set = 0, binding = 3) buffer SphereBuffer {
 	vec4 colors[];
 };
 
-layout(std430, set = 0, binding = 3) buffer LightBuffer {
+layout(std430, set = 0, binding = 4) buffer LightBuffer {
 	LightData lights[];
 };
 

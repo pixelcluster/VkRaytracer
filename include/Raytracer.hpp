@@ -36,6 +36,8 @@ class HardwareSphereRaytracer {
 	void setGeometryBLASBatchNames();
 	void setGeometryTLASBatchNames(size_t frameIndex);
 
+	void recreateAccumulationImage();
+
 	constexpr size_t vertexDataSize();
 	constexpr size_t indexDataSize();
 	constexpr size_t transformDataSize();
@@ -64,6 +66,7 @@ class HardwareSphereRaytracer {
 		float aspectRatio;
 		float tanHalfFov;
 		float time;
+		uint32_t accumulatedSampleCount;
 	};
 
 	struct PerObjectData {
@@ -120,6 +123,11 @@ class HardwareSphereRaytracer {
 	BufferSubAllocation m_normalStagingStorage;
 	BufferSubAllocation m_sbtStagingStorage;
 
+	VkDeviceMemory m_imageMemory = VK_NULL_HANDLE;
+	VkImage m_accumulationImage = VK_NULL_HANDLE;
+	VkImageView m_accumulationImageView = VK_NULL_HANDLE;
+	VkExtent3D m_accumulationImageExtent;
+
 	VkPipeline m_pipeline;
 	VkPipelineLayout m_pipelineLayout;
 
@@ -136,6 +144,7 @@ class HardwareSphereRaytracer {
 
 	float m_worldPos[3] = { 0.0f, 2.0f, -5.0f };
 	double m_lastTime = 0.0f;
+	uint32_t m_accumulatedSampleCount = 0;
 
 	RayTracingDevice m_device;
 };

@@ -14,7 +14,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 
 	// Create ray tracing pipeline
 
-	VkDescriptorSetLayoutBinding bindings[4] = { { .binding = 0,
+	VkDescriptorSetLayoutBinding bindings[5] = { { .binding = 0,
 												   .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
 												   .descriptorCount = 1,
 												   .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
@@ -24,10 +24,14 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 												   .descriptorCount = 1,
 												   .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR },
 												 { .binding = 2,
+												   .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+												   .descriptorCount = 1,
+												   .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR },
+												 { .binding = 3,
 												   .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 												   .descriptorCount = 1,
 												   .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR },
-												 { .binding = 3,
+												 { .binding = 4,
 												   .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 												   .descriptorCount = 1,
 												   .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR } };
@@ -45,7 +49,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 														   .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR } };
 
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 4, .pBindings = bindings
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 5, .pBindings = bindings
 	};
 
 	verifyResult(vkCreateDescriptorSetLayout(m_device.device(), &descriptorSetLayoutCreateInfo, nullptr,
@@ -59,7 +63,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 											 &m_geometryDescriptorSetLayout));
 
 	VkPushConstantRange constantRange = { .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-										  .offset = 0, .size = sizeof(PushConstantData) };
+										  .offset = 0,
+										  .size = sizeof(PushConstantData) };
 
 	VkDescriptorSetLayout layouts[2] = { m_descriptorSetLayout, m_geometryDescriptorSetLayout };
 
@@ -315,11 +320,11 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 												  properties2.properties.limits.minStorageBufferOffsetAlignment);
 
 		m_lightDataStorage[i] = addSuballocation(objectDataInfo, sizeof(LightData) * m_emissiveSphereIndices.size(),
-		properties2.properties.limits.minStorageBufferOffsetAlignment);
+												 properties2.properties.limits.minStorageBufferOffsetAlignment);
 	}
 
-	m_normalDataStorage = addSuballocation(
-		objectDataInfo, normalDataSize(), properties2.properties.limits.minStorageBufferOffsetAlignment);
+	m_normalDataStorage = addSuballocation(objectDataInfo, normalDataSize(),
+										   properties2.properties.limits.minStorageBufferOffsetAlignment);
 
 	m_aabbDataStorage = addSuballocation(accelerationStructureDataInfo, sizeof(VkAabbPositionsKHR),
 										 properties2.properties.limits.minStorageBufferOffsetAlignment,
@@ -433,6 +438,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	vkDestroyShaderModule(m_device.device(), triangleHitShaderModule, nullptr);
 	vkDestroyShaderModule(m_device.device(), missShaderModule, nullptr);
 	vkDestroyShaderModule(m_device.device(), intersectionShaderModule, nullptr);
+
+	recreateAccumulationImage();
 
 	VkDescriptorBufferInfo vertexBufferInfo = { .buffer = m_accelerationStructureDataBuffer.buffer,
 												.offset = m_vertexDataStorage.offset,
@@ -738,12 +745,21 @@ HardwareSphereRaytracer::~HardwareSphereRaytracer() {
 	vkDestroyPipelineLayout(m_device.device(), m_pipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device.device(), m_descriptorSetLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device.device(), m_geometryDescriptorSetLayout, nullptr);
+
+	// Accumulation image
+	vkDestroyImageView(m_device.device(), m_accumulationImageView, nullptr);
+	vkDestroyImage(m_device.device(), m_accumulationImage, nullptr);
+	vkFreeMemory(m_device.device(), m_imageMemory, nullptr);
 }
 
 bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	FrameData frameData = m_device.beginFrame();
 	if (!frameData.commandBuffer) {
 		return !m_device.window().shouldWindowClose();
+	}
+	if (frameData.windowSizeChanged) {
+		recreateAccumulationImage();
+		m_accumulatedSampleCount = 0;
 	}
 
 	double currentTime = glfwGetTime();
@@ -752,22 +768,30 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 
 	if (m_device.window().keyPressed(GLFW_KEY_W)) {
 		m_worldPos[2] += 2.0f * deltaTime;
+		m_accumulatedSampleCount = 0;
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_S)) {
 		m_worldPos[2] -= 2.0f * deltaTime;
+		m_accumulatedSampleCount = 0;
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_A)) {
 		m_worldPos[0] -= 2.0f * deltaTime;
+		m_accumulatedSampleCount = 0;
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_D)) {
 		m_worldPos[0] += 2.0f * deltaTime;
+		m_accumulatedSampleCount = 0;
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_LEFT_SHIFT)) {
 		m_worldPos[1] += 2.0f * deltaTime;
+		m_accumulatedSampleCount = 0;
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_LEFT_CONTROL)) {
 		m_worldPos[1] -= 2.0f * deltaTime;
+		m_accumulatedSampleCount = 0;
 	}
+
+	++m_accumulatedSampleCount;
 
 	// Write descriptor sets
 
@@ -786,24 +810,36 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 														.descriptorType =
 															VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR };
 
-	VkDescriptorImageInfo imageInfo = { .sampler = m_imageSampler,
-										.imageView = frameData.swapchainImageView,
+	VkDescriptorImageInfo accumulationImageInfo = { .sampler = m_imageSampler,
+										.imageView = m_accumulationImageView,
 										.imageLayout = VK_IMAGE_LAYOUT_GENERAL };
 
-	VkWriteDescriptorSet imageWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+	VkWriteDescriptorSet accumulationImageWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 										.dstSet = m_descriptorSets[frameData.frameIndex],
 										.dstBinding = 1,
 										.dstArrayElement = 0,
 										.descriptorCount = 1,
 										.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-										.pImageInfo = &imageInfo };
+										.pImageInfo = &accumulationImageInfo };
+
+	VkDescriptorImageInfo swapchainImageInfo = { .sampler = m_imageSampler,
+										.imageView = frameData.swapchainImageView,
+										.imageLayout = VK_IMAGE_LAYOUT_GENERAL };
+
+	VkWriteDescriptorSet swapchainImageWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+										.dstSet = m_descriptorSets[frameData.frameIndex],
+										.dstBinding = 2,
+										.dstArrayElement = 0,
+										.descriptorCount = 1,
+										.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+										.pImageInfo = &swapchainImageInfo };
 
 	VkDescriptorBufferInfo colorBufferInfo = { .buffer = m_objectDataBuffer.buffer,
 											   .offset = m_objectDataStorage[frameData.frameIndex].offset,
 											   .range = m_objectDataStorage[frameData.frameIndex].size };
 	VkWriteDescriptorSet colorBufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 											  .dstSet = m_descriptorSets[frameData.frameIndex],
-											  .dstBinding = 2,
+											  .dstBinding = 3,
 											  .dstArrayElement = 0,
 											  .descriptorCount = 1,
 											  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -814,15 +850,15 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 											   .range = m_emissiveSphereIndices.size() * sizeof(LightData) };
 	VkWriteDescriptorSet lightBufferWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 											  .dstSet = m_descriptorSets[frameData.frameIndex],
-											  .dstBinding = 3,
+											  .dstBinding = 4,
 											  .dstArrayElement = 0,
 											  .descriptorCount = 1,
 											  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 											  .pBufferInfo = &lightBufferInfo };
 
-	VkWriteDescriptorSet writes[] = { accelerationStructureWrite, imageWrite, colorBufferWrite, lightBufferWrite };
+	VkWriteDescriptorSet writes[] = { accelerationStructureWrite, accumulationImageWrite, swapchainImageWrite, colorBufferWrite, lightBufferWrite };
 
-	vkUpdateDescriptorSets(m_device.device(), 4, writes, 0, nullptr);
+	vkUpdateDescriptorSets(m_device.device(), 5, writes, 0, nullptr);
 
 	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(0));
 
@@ -923,15 +959,24 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 										   .baseArrayLayer = 0,
 										   .layerCount = 1 };
 
-	VkImageMemoryBarrier memoryBarrierBefore = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-												 .srcAccessMask = 0,
-												 .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-												 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-												 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-												 .srcQueueFamilyIndex = m_device.queueFamilyIndex(),
-												 .dstQueueFamilyIndex = m_device.queueFamilyIndex(),
-												 .image = frameData.swapchainImage,
-												 .subresourceRange = imageRange };
+	VkImageMemoryBarrier swapchainMemoryBarrierBefore = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+														  .srcAccessMask = 0,
+														  .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+														  .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+														  .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+														  .srcQueueFamilyIndex = m_device.queueFamilyIndex(),
+														  .dstQueueFamilyIndex = m_device.queueFamilyIndex(),
+														  .image = frameData.swapchainImage,
+														  .subresourceRange = imageRange };
+	VkImageMemoryBarrier accumulationMemoryBarrierBefore = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+															 .srcAccessMask = 0,
+															 .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+															 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+															 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+															 .srcQueueFamilyIndex = m_device.queueFamilyIndex(),
+															 .dstQueueFamilyIndex = m_device.queueFamilyIndex(),
+															 .image = m_accumulationImage,
+															 .subresourceRange = imageRange };
 
 	VkBufferMemoryBarrier objectDataMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
 													  .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -942,15 +987,16 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 													  .offset = m_objectDataStorage[frameData.frameIndex].offset,
 													  .size = m_objectDataStorage[frameData.frameIndex].size };
 	VkBufferMemoryBarrier lightDataMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-													  .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-													  .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-													  .srcQueueFamilyIndex = m_device.queueFamilyIndex(),
-													  .dstQueueFamilyIndex = m_device.queueFamilyIndex(),
-													  .buffer = m_objectDataBuffer.buffer,
-													  .offset = m_lightDataStorage[frameData.frameIndex].offset,
-													  .size = m_lightDataStorage[frameData.frameIndex].size };
+													 .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+													 .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+													 .srcQueueFamilyIndex = m_device.queueFamilyIndex(),
+													 .dstQueueFamilyIndex = m_device.queueFamilyIndex(),
+													 .buffer = m_objectDataBuffer.buffer,
+													 .offset = m_lightDataStorage[frameData.frameIndex].offset,
+													 .size = m_lightDataStorage[frameData.frameIndex].size };
 
 	VkBufferMemoryBarrier dataMemoryBarriers[2] = { objectDataMemoryBarrier, lightDataMemoryBarrier };
+	VkImageMemoryBarrier imageMemoryBarriers[2] = { swapchainMemoryBarrierBefore, accumulationMemoryBarrierBefore };
 
 	VkMemoryBarrier buildMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 										   .srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
@@ -959,8 +1005,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdPipelineBarrier(frameData.commandBuffer,
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
 							 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_TRANSFER_BIT,
-						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &buildMemoryBarrier, 2,
-						 dataMemoryBarriers, 1, &memoryBarrierBefore);
+						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &buildMemoryBarrier, 2, dataMemoryBarriers,
+						 2, imageMemoryBarriers);
 
 	vkCmdBindPipeline(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_pipeline);
 
@@ -968,7 +1014,8 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 							  .aspectRatio = static_cast<float>(m_device.window().width()) /
 											 static_cast<float>(m_device.window().height()),
 							  .tanHalfFov = tanf((75.0f / 180.0f) * std::numbers::pi / 2.0f),
-							  .time = static_cast<float>(glfwGetTime()) };
+							  .time = static_cast<float>(glfwGetTime()),
+							  .accumulatedSampleCount = m_accumulatedSampleCount };
 	vkCmdPushConstants(frameData.commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0,
 					   sizeof(PushConstantData), &data);
 
@@ -1184,4 +1231,52 @@ constexpr size_t HardwareSphereRaytracer::normalCount() {
 		normalCount += m_triangleObjects[i].indexCount / 3;
 	}
 	return normalCount;
+}
+
+void HardwareSphereRaytracer::recreateAccumulationImage() {
+	// resize calls vkDeviceWaitIdle, so this should be safe
+	vkDestroyImageView(m_device.device(), m_accumulationImageView, nullptr);
+	vkDestroyImage(m_device.device(), m_accumulationImage, nullptr);
+	vkFreeMemory(m_device.device(), m_imageMemory, nullptr);
+
+	m_accumulationImageExtent = { .width = static_cast<uint32_t>(m_device.window().width()),
+								  .height = static_cast<uint32_t>(m_device.window().height()),
+								  .depth = 1 };
+
+	// Create target image for value accumulation
+	VkImageCreateInfo imageCreateInfo = { .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+										  .imageType = VK_IMAGE_TYPE_2D,
+										  .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+										  .extent = m_accumulationImageExtent,
+										  .mipLevels = 1,
+										  .arrayLayers = 1,
+										  .samples = VK_SAMPLE_COUNT_1_BIT,
+										  .tiling = VK_IMAGE_TILING_OPTIMAL,
+										  .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+										  .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+										  .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED };
+	verifyResult(vkCreateImage(m_device.device(), &imageCreateInfo, nullptr, &m_accumulationImage));
+
+	VkMemoryRequirements requirements;
+	vkGetImageMemoryRequirements(m_device.device(), m_accumulationImage, &requirements);
+
+	VkMemoryAllocateInfo imageMemoryAllocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+													 .allocationSize = requirements.size,
+													 .memoryTypeIndex = m_device.findBestMemoryIndex(
+														 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+														 ~requirements.memoryTypeBits) };
+	verifyResult(vkAllocateMemory(m_device.device(), &imageMemoryAllocateInfo, nullptr, &m_imageMemory));
+
+	vkBindImageMemory(m_device.device(), m_accumulationImage, m_imageMemory, 0);
+
+	VkImageViewCreateInfo imageViewCreateInfo = { .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+												  .image = m_accumulationImage,
+												  .viewType = VK_IMAGE_VIEW_TYPE_2D,
+												  .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+												  .subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+																		.baseMipLevel = 0,
+																		.baseArrayLayer = 0,
+																		.levelCount = 1,
+																		.layerCount = 1 } };
+	verifyResult(vkCreateImageView(m_device.device(), &imageViewCreateInfo, nullptr, &m_accumulationImageView));
 }
