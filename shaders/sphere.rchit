@@ -84,18 +84,15 @@ void main() {
 
 		payload.isLightSample = false;
 		if(payload.recursionDepth++ < 7) {
-			vec3 sampleRadiance = vec3(0.0f);
-
 			uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
-
-			vec3 sampleDir = sampleMicrofacetDistribution(gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState);
-			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
-
 			float bsdfFactor = microfacetBSDF(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 			float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 			payload.rayThroughput *= bsdfFactor * abs(dot(-gl_WorldRayDirectionEXT, objectHitNormal)) / bsdfPdf;
+	
+			vec3 sampleDir = sampleMicrofacetDistribution(gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState);
+			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-			incomingRadiance += sampleRadiance;
+			incomingRadiance += payload.color;
 		}
 		payload.color = vec4(incomingRadiance, 1.0f);
 	}
