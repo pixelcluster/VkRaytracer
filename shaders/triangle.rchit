@@ -5,8 +5,8 @@
 #extension GL_GOOGLE_include_directive : require
 
 const float eta_i = 1.0f;
-const float eta_t = 1.22;
-const float alpha = 0.3;
+const float eta_t = 1.89;
+const float alpha = 0.51;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -80,14 +80,17 @@ void main() {
 
 	if(payload.recursionDepth++ < 7) {
 		uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
-		float bsdfFactor = microfacetBSDF(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
-		float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
-		payload.rayThroughput *= bsdfFactor * abs(dot(-gl_WorldRayDirectionEXT, objectHitNormal)) / bsdfPdf;
 
 		vec3 sampleDir = sampleMicrofacetDistribution(gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState);
-		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+		float bsdfFactor = microfacetBSDF(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
+		float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
+		if(bsdfPdf > 0.0f) {
+			payload.rayThroughput *= bsdfFactor * abs(dot(-gl_WorldRayDirectionEXT, objectHitNormal)) / bsdfPdf;
 
-		incomingRadiance += payload.color;
+			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+
+			incomingRadiance += payload.color.rgb * payload.rayThroughput;
+		}
 	}
 	payload.color = vec4(incomingRadiance, 1.0f);
 }

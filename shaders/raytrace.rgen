@@ -52,6 +52,10 @@ void main() {
 	if(accumulatedSampleCount > 1)
 		accumulatedRadiance = prevAccumulatedRadiance * (1 - 1.0f / accumulatedSampleCount) + accumulatedRadiance * (1.0f / accumulatedSampleCount);
 
+	if(any(isnan(accumulatedRadiance))) {
+		accumulatedRadiance = vec4(1.0f, 0.0f, 0.0f ,1.0f);
+	}
+	
 	imageStore(accumulationImage, ivec2(gl_LaunchIDEXT.xy), accumulatedRadiance);
 
 	accumulatedRadiance = accumulatedRadiance / (accumulatedRadiance + vec4(1.0f, 1.0f, 1.0f, 0.0f));

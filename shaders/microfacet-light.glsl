@@ -72,12 +72,12 @@ float erfInvApprox(float x) {
 float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosThetaI = dot(incidentDir, normal);
 
-	vec3 microfacetNormal = (outgoingDir + incidentDir);
-	if(dot(microfacetNormal, microfacetNormal) < 1.e-5) return 0.0f;
-	microfacetNormal = normalize(microfacetNormal);
-
 	float cosTheta = abs(dot(outgoingDir, normal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
+
+	vec3 microfacetNormal = (outgoingDir + incidentDir);
+	if(dot(microfacetNormal, microfacetNormal) < 1.e-5 || cosThetaI == 0.0f || cosTheta == 0.0f) return 0.0f;
+	microfacetNormal = normalize(microfacetNormal);
 
 	float cosThetaMicrofacet = abs(dot(outgoingDir, microfacetNormal));
 
