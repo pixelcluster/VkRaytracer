@@ -68,7 +68,7 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 void main() {
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
 	vec3 sphereCenter = gl_ObjectToWorldEXT * vec4(0.0f, 0.0f, 0.0f, 1.0f);
-	vec3 objectHitNormal = normalize(hitPoint - sphereCenter);
+	vec3 objectHitNormal = normalize(gl_ObjectRayOriginEXT + gl_HitTEXT * gl_ObjectRayDirectionEXT);
 
 	if(colors[gl_InstanceID].a < 0.0f) {
 		payload.color = vec4(colors[gl_InstanceID].rgb * -colors[gl_InstanceID].a, 1.0f);

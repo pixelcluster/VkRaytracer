@@ -6,7 +6,7 @@
 
 const float eta_i = 1.0f;
 const float eta_t = 1.89;
-const float alpha = 0.51;
+const float alpha = 0.31;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING

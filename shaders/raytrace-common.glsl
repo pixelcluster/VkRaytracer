@@ -35,7 +35,7 @@ vec3 weightLight(bool sampledHemisphere, LightData lightData, vec3 hitPoint, vec
 		lightPdf = pdfSphere(hitPoint, sampleDir, lightData);
 	}
 
-	if(lightPdf <= 0.0f) {
+	if(lightPdf <= 0.0f && bsdfPdf <= 0.0f) {
 		return vec3(0.0f);
 	}
 
@@ -50,7 +50,7 @@ vec3 weightBSDFLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 ob
 	//todo: NEE should discard the ray even if a different light than the chosen one was hit
 	radiance.a = max(radiance.a, 0.0f); //zero radiance if ray didn't hit light
 
-	if(lightPdf > 0.0f)
+	if(lightPdf > 0.0f && bsdfPdf > 0.0f)
 		return (bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) / bsdfPdf) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
 	else
 		return 0.0f.xxx;
@@ -72,7 +72,10 @@ vec3 weightBSDFEnvmap(vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 
 		radiance.a = 0.0f;
 	}
 
-	return (bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) / max(bsdfPdf, 0.00001f)) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
+	if(bsdfPdf <= 0.0f)
+		return vec3(0.0f);
+
+	return (bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) / bsdfPdf) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
 }
 
 #endif

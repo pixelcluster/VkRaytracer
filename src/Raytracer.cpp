@@ -1275,8 +1275,8 @@ void HardwareSphereRaytracer::recreateAccumulationImage() {
 												  .format = VK_FORMAT_R32G32B32A32_SFLOAT,
 												  .subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 																		.baseMipLevel = 0,
-																		.baseArrayLayer = 0,
 																		.levelCount = 1,
+																		.baseArrayLayer = 0,
 																		.layerCount = 1 } };
 	verifyResult(vkCreateImageView(m_device.device(), &imageViewCreateInfo, nullptr, &m_accumulationImageView));
 }
