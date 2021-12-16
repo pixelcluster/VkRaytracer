@@ -89,7 +89,7 @@ void main() {
 
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-			incomingRadiance += payload.color.rgb * payload.rayThroughput;
+			incomingRadiance += payload.color.rgb;
 		}
 	}
 	payload.color = vec4(incomingRadiance, 1.0f);

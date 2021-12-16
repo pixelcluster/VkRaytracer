@@ -71,7 +71,7 @@ void main() {
 	vec3 objectHitNormal = normalize(gl_ObjectRayOriginEXT + gl_HitTEXT * gl_ObjectRayDirectionEXT);
 
 	if(colors[gl_InstanceID].a < 0.0f) {
-		payload.color = vec4(colors[gl_InstanceID].rgb * -colors[gl_InstanceID].a, 1.0f);
+		payload.color = payload.color = vec4(colors[gl_InstanceID].rgb * -colors[gl_InstanceID].a, 1.0f);
 	}
 	else if(payload.isLightSample) {
 		payload.color = vec4(0.0f, 0.0f, 0.0f, 1.0f);

@@ -70,7 +70,7 @@ float erfInvApprox(float x) {
 
 //equation from pbrt
 float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
-	float cosThetaI = dot(incidentDir, normal);
+	float cosThetaI = abs(dot(incidentDir, normal));
 
 	float cosTheta = abs(dot(outgoingDir, normal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
@@ -93,6 +93,7 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 
 //algorithm from https://hal.inria.fr/file/index/docid/996995/filename/article.pdf
 //algorithm is in supplemental material at https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fcgf.12417&file=cgf12417-sup-0001-S1.pdf
+//stretching, rotation, unstretching and normal computation is translated directly from C++ implementation
 //
 vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint randomState) {
 	float U1 = nextRand(randomState) * uintBitsToFloat(0x2f800004U);
@@ -108,12 +109,15 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 
 	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
 
-	vec3 transformedIncidentDir = -vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
+	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
 	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x * alpha, transformedIncidentDir.y, transformedIncidentDir.z * alpha));
 
 	float sinTheta = sqrt(max(1.0f - (scaledIncidentDir.y * scaledIncidentDir.y), 0.0f));
 	float tanTheta = (sinTheta / abs(scaledIncidentDir.y));
 	float cotTheta = 1.0f / tanTheta;
+
+	float cosPhi = scaledIncidentDir.x / sinTheta;
+	float sinPhi = sqrt(max(1.0f - (cosPhi * cosPhi), 0.0f));
 
 	float erfCotTheta = erfApprox(cotTheta);
 
@@ -152,13 +156,15 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 
 	z_m = erfInvApprox(2 * U2 - 1.0f);
 
+	vec2 rotatedSlopes = -vec2(cosPhi * x_m - sinPhi * z_m, sinPhi * x_m + cosPhi * z_m) * alpha;
+
 	mat3 shadingSpaceToWorld = mat3(surfaceTangent1.x, normal.x, -surfaceTangent2.x,
 									surfaceTangent1.y, normal.y, -surfaceTangent2.y,
 									surfaceTangent1.z, normal.z, -surfaceTangent2.z);
 
-	normal = (vec3(x_m, 1.0f, z_m) * shadingSpaceToWorld) * alpha;
+	normal = (normalize(vec3(rotatedSlopes.x, 1.0f, rotatedSlopes.y)) * shadingSpaceToWorld);
 
-	return normalize(normal);
+	return normal;
 }
 
 //from pbrt
