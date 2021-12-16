@@ -110,10 +110,12 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
 
 	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
-	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x * alpha, transformedIncidentDir.y, transformedIncidentDir.z * alpha));
+	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x, transformedIncidentDir.y, transformedIncidentDir.z));
+	//actually scaledIncidentDir.x and scaledIncidentDir.z should be multiplied by alpha??
+	//scaledIncidentDir = normalize(scaledIncidentDir * vec3(alpha, 1.0f, -alpha));
 
 	float sinTheta = sqrt(max(1.0f - (scaledIncidentDir.y * scaledIncidentDir.y), 0.0f));
-	float tanTheta = (sinTheta / abs(scaledIncidentDir.y));
+	float tanTheta = (sinTheta / scaledIncidentDir.y);
 	float cotTheta = 1.0f / tanTheta;
 
 	float cosPhi = scaledIncidentDir.x / sinTheta;
@@ -121,7 +123,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 
 	float erfCotTheta = erfApprox(cotTheta);
 
-	float c = smithG1(normalize(scaledIncidentDir), tanTheta) * erfCotTheta;
+	float c = smithG1(scaledIncidentDir, tanTheta) * erfCotTheta;
 	float x_m = 1.0f, z_m = 0.0f;
 
 	if(U1 <= c) {
@@ -134,7 +136,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 		if(U1 <= p) {
 			if(p > 0.0f)
 				U1 /= p;
-			x_m = -sqrt(-log(max(U1 * exp(-cotTheta * cotTheta), 0.00001f)));
+			x_m = -sqrt(-log(U1 * exp(-cotTheta * cotTheta)));
 		}
 		else {
 			if(p < 1.0f)
@@ -162,7 +164,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 									surfaceTangent1.y, normal.y, -surfaceTangent2.y,
 									surfaceTangent1.z, normal.z, -surfaceTangent2.z);
 
-	normal = (normalize(vec3(rotatedSlopes.x, 1.0f, rotatedSlopes.y)) * shadingSpaceToWorld);
+	normal = (normalize(vec3(rotatedSlopes.x, 1.0f, -rotatedSlopes.y)) * shadingSpaceToWorld);
 
 	return normal;
 }

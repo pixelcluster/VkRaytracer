@@ -6,7 +6,7 @@
 
 const float eta_i = 1.0f;
 const float eta_t = 1.89;
-const float alpha = 0.31;
+const float alpha = 0.21;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -81,7 +81,9 @@ void main() {
 	if(payload.recursionDepth++ < 7) {
 		uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
 
-		vec3 sampleDir = sampleMicrofacetDistribution(gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState);
+		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState));
+		//ensure sampleDir is in the right hemisphere
+		sampleDir.y = -abs(sampleDir.y);
 		float bsdfFactor = microfacetBSDF(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 		float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 		if(bsdfPdf > 0.0f) {
@@ -89,7 +91,7 @@ void main() {
 
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-			incomingRadiance += payload.color.rgb;
+			incomingRadiance += min(payload.color.rgb, vec3(6.0f));
 		}
 	}
 	payload.color = vec4(incomingRadiance, 1.0f);
