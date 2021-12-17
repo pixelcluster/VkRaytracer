@@ -14,13 +14,18 @@ float beckmannLambdaApprox(float tanTheta) {
 	return (1.0 - 1.259 * a + 0.396 * a * a) / (3.535 * a + 2.181 * a * a);
 }
 
-float smithG1(vec3 wo, vec3 wm, float tanTheta) {
-	if(dot(wo, wm) < 0 || isinf(tanTheta)) return 0.0f;
-	return 1.0f / (1.0f + beckmannLambdaApprox(tanTheta));
+float beckmannLambdaApproxRoughness1(float tanTheta) {
+	float a = 1.0f / (abs(tanTheta));
+	if(a >= 1.6f) return 0.0f;
+	return (1.0 - 1.259 * a + 0.396 * a * a) / (3.535 * a + 2.181 * a * a);
 }
+
 float smithG1(vec3 wo, float tanTheta) {
 	if(isinf(tanTheta)) return 0.0f;
-	return 1.0/ (1.0f + beckmannLambdaApprox(tanTheta));
+	return 1.0f / (1.0f + beckmannLambdaApprox(tanTheta));
+}
+float smithG1Roughness1(vec3 wo, float tanTheta) {
+	return 1.0f / (1.0f + beckmannLambdaApprox(tanTheta));
 }
 //from pbrt
 float smithG(vec3 wi, vec3 wo, vec3 normal) {
@@ -111,8 +116,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 
 	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
 	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x, transformedIncidentDir.y, transformedIncidentDir.z));
-	//actually scaledIncidentDir.x and scaledIncidentDir.z should be multiplied by alpha??
-	//scaledIncidentDir = normalize(scaledIncidentDir * vec3(alpha, 1.0f, -alpha));
+	scaledIncidentDir = normalize(scaledIncidentDir * vec3(alpha, 1.0f, alpha));
 
 	float sinTheta = sqrt(max(1.0f - (scaledIncidentDir.y * scaledIncidentDir.y), 0.0f));
 	float tanTheta = (sinTheta / scaledIncidentDir.y);
@@ -123,7 +127,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 
 	float erfCotTheta = erfApprox(cotTheta);
 
-	float c = smithG1(scaledIncidentDir, tanTheta) * erfCotTheta;
+	float c = 1.0f - smithG1Roughness1(scaledIncidentDir, tanTheta) * erfCotTheta;
 	float x_m = 1.0f, z_m = 0.0f;
 
 	if(U1 <= c) {
