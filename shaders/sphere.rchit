@@ -80,7 +80,7 @@ void main() {
 		vec3 incomingRadiance = vec3(0.0f);
 		//Save relevant ray payload, sampleLight modifies it
 
-		//incomingRadiance += payload.rayThroughput * sampleLight(hitPoint, objectHitNormal);
+		incomingRadiance += payload.rayThroughput * sampleLight(hitPoint, objectHitNormal);
 
 		payload.isLightSample = false;
 		if(payload.recursionDepth++ < 7) {
@@ -94,7 +94,7 @@ void main() {
 	
 				traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-				incomingRadiance += min(payload.color.rgb, 6.0f.xxx);
+				incomingRadiance += payload.color.rgb, 6.0f.xxx;
 			}
 			incomingRadiance = sampleDir;
 		}

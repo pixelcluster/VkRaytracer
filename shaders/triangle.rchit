@@ -6,7 +6,7 @@
 
 const float eta_i = 1.0f;
 const float eta_t = 1.89;
-const float alpha = 0.01;
+const float alpha = 0.41;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -91,7 +91,7 @@ void main() {
 
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-			incomingRadiance += min(payload.color.rgb, vec3(6.0f));
+			incomingRadiance += payload.color.rgb;
 		}
 	}
 	payload.color = vec4(incomingRadiance, 1.0f);

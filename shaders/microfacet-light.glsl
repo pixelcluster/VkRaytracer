@@ -25,7 +25,7 @@ float smithG1(vec3 wo, float tanTheta) {
 	return 1.0f / (1.0f + beckmannLambdaApprox(tanTheta));
 }
 float smithG1Roughness1(vec3 wo, float tanTheta) {
-	return 1.0f / (1.0f + beckmannLambdaApprox(tanTheta));
+	return 1.0f / (1.0f + beckmannLambdaApproxRoughness1(tanTheta));
 }
 //from pbrt
 float smithG(vec3 wi, vec3 wo, vec3 normal) {
@@ -123,12 +123,12 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 	float cotTheta = 1.0f / tanTheta;
 
 	float cosPhi = scaledIncidentDir.x / sinTheta;
-	float sinPhi = sqrt(max(1.0f - (cosPhi * cosPhi), 0.0f));
+	float sinPhi = -scaledIncidentDir.z / sinTheta;
 
 	float erfCotTheta = erfApprox(cotTheta);
 
 	float c = 1.0f - smithG1Roughness1(scaledIncidentDir, tanTheta) * erfCotTheta;
-	float x_m = 1.0f, z_m = 0.0f;
+	float x_m = 0.0f, z_m = 0.0f;
 
 	if(U1 <= c) {
 		U1 /= c;
