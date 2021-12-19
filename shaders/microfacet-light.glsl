@@ -89,7 +89,7 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosThetaNormal = clamp(dot(microfacetNormal, normal), 0.0f, 1.0f);
 	float sinThetaNormal = sqrt(max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f));
 	
-	float fresnelFactor = fresnel(dot(incidentDir, microfacetNormal));
+	float fresnelFactor = fresnel(abs(dot(incidentDir, microfacetNormal)));
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal * sinThetaNormal);
 	float mask = smithG(incidentDir, outgoingDir, normal);
 
@@ -105,7 +105,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 	float U2 = nextRand(randomState) * uintBitsToFloat(0x2f800004U);
 
 	vec3 surfaceTangent1;
-	if(abs(normal.x) > abs(normal.y)) {
+	if(abs(normal.x) > -abs(normal.z)) {
 		surfaceTangent1 = normalize(vec3(-normal.y, normal.x, 0.0f));
 	}
 	else {
@@ -114,11 +114,12 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 
 	vec3 surfaceTangent2 = cross(normal, surfaceTangent1);
 
-	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), -dot(incidentDir, surfaceTangent2));
+	vec3 transformedIncidentDir = vec3(dot(incidentDir, surfaceTangent1), dot(incidentDir, normal), dot(incidentDir, surfaceTangent2));
 	vec3 scaledIncidentDir = normalize(vec3(transformedIncidentDir.x, transformedIncidentDir.y, transformedIncidentDir.z));
 	scaledIncidentDir = normalize(scaledIncidentDir * vec3(alpha, 1.0f, alpha));
 
-	float sinTheta = sqrt(max(1.0f - (scaledIncidentDir.y * scaledIncidentDir.y), 0.0f));
+	float cosTheta = abs(scaledIncidentDir.y);
+	float sinTheta = sqrt(max(1.0f - (cosTheta * cosTheta), 0.0f));
 	float tanTheta = (sinTheta / scaledIncidentDir.y);
 	float cotTheta = 1.0f / tanTheta;
 
@@ -130,29 +131,26 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 	float c = 1.0f - smithG1Roughness1(scaledIncidentDir, tanTheta) * erfCotTheta;
 	float x_m = 0.0f, z_m = 0.0f;
 
-	if(U1 <= c) {
+	if(U1 < c) {
 		U1 /= c;
-		float omega_1 = sinTheta / (2.0f * sqrt(PI)) * exp(-cotTheta * cotTheta);
-		float omega_2 = scaledIncidentDir.y * (0.5f - 0.5f * erfCotTheta);
+		float omega_1 = 1.0f / (2.0f * sqrt(PI)) * sinTheta * exp(-cotTheta * cotTheta);
+		float omega_2 = cosTheta * (0.5f - 0.5f * erfCotTheta);
 
 		float p = omega_1 / (omega_1 + omega_2);
-
-		if(U1 <= p) {
-			if(p > 0.0f)
-				U1 /= p;
+		if(U1 < p) {
+			U1 /= p;
 			x_m = -sqrt(-log(U1 * exp(-cotTheta * cotTheta)));
 		}
 		else {
-			if(p < 1.0f)
-				U1 = (U1 - p) / (1.0f - p);
+			U1 = (U1 - p) / (1.0f - p);
 			x_m = erfInvApprox(U1 - 1.0f - U1 * erfCotTheta);
 		}
 	}
 	else {
 		U1 = (U1 - c) / (1.0f - c);
 		x_m = erfInvApprox((-1.0f + 2.0f * U1) * erfCotTheta);
-		float p = (-x_m * sinTheta + scaledIncidentDir.y) / (2.0f * scaledIncidentDir.y);
-		if(U2 > p) {
+		float p = (-x_m * sinTheta + cosTheta) / (2.0f * cosTheta);
+		if(U2 >= p) {
 			U2 = (U2 - p) / (1.0f - p);
 			x_m *= -1.0f;
 		}
@@ -160,13 +158,13 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 			U2 /= p;
 	}
 
-	z_m = erfInvApprox(2 * U2 - 1.0f);
+	z_m = erfInvApprox(U2 * 2.0f - 1.0f);
 
 	vec2 rotatedSlopes = -vec2(cosPhi * x_m - sinPhi * z_m, sinPhi * x_m + cosPhi * z_m) * alpha;
 
-	mat3 shadingSpaceToWorld = mat3(surfaceTangent1.x, normal.x, -surfaceTangent2.x,
-									surfaceTangent1.y, normal.y, -surfaceTangent2.y,
-									surfaceTangent1.z, normal.z, -surfaceTangent2.z);
+	mat3 shadingSpaceToWorld = mat3(surfaceTangent1.x, normal.x, surfaceTangent2.x,
+									surfaceTangent1.y, normal.y, surfaceTangent2.y,
+									surfaceTangent1.z, normal.z, surfaceTangent2.z);
 
 	normal = (normalize(vec3(rotatedSlopes.x, 1.0f, -rotatedSlopes.y)) * shadingSpaceToWorld);
 
@@ -182,13 +180,13 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosTheta = abs(dot(incidentDir, microfacetNormal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
-	float cosThetaNormal = dot(microfacetNormal, normal);
+	float cosThetaNormal = abs(dot(microfacetNormal, normal));
 	float sinThetaNormal2 = max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f);
 	
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);
 	float mask = smithG1(incidentDir, sinTheta / cosTheta);
 
-	return distribution * mask * abs(dot(incidentDir, microfacetNormal)) / abs(dot(incidentDir, normal));
+	return distribution * mask * max(dot(incidentDir, microfacetNormal), 0.707107f) / abs(dot(incidentDir, normal));
 }
 
 #endif
