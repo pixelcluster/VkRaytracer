@@ -186,7 +186,7 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);
 	float mask = smithG1(incidentDir, sinTheta / cosTheta);
 
-	return distribution * mask * max(dot(incidentDir, microfacetNormal), 0.707107f) / abs(dot(incidentDir, normal));
+	return distribution * mask * max(dot(incidentDir, microfacetNormal), 0.0f) / abs(dot(incidentDir, normal));
 }
 
 #endif

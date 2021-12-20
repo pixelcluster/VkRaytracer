@@ -6,7 +6,7 @@
 
 const float eta_i = 1.0f;
 const float eta_t = 1.89;
-const float alpha = 0.01;
+const float alpha = 0.41;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -46,7 +46,7 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	payload.isLightSample = true;
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-	//sampleRadiance += weightLight(lightIndex == lights.length(), lightData, hitPoint, sampleDir, objectHitNormal, payload.color * vec4(colors[gl_InstanceID].rgb, 1.0f));
+	sampleRadiance += weightLight(lightIndex == lights.length(), lightData, hitPoint, sampleDir, objectHitNormal, payload.color * vec4(colors[gl_InstanceID].rgb, 1.0f));
 
 	//Sample BSDF
 		
@@ -58,10 +58,10 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 			
 	if(lightIndex == lights.length())
 		sampleRadiance += weightBSDFEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color * vec4(colors[gl_InstanceID].rgb, 1.0f));
-	/*else
-		sampleRadiance += weightBSDFLight(lights[lightIndex], hitPoint, sampleDir, objectHitNormal, payload.color * vec4(colors[gl_InstanceID].rgb, 1.0f));*/
+	else
+		sampleRadiance += weightBSDFLight(lights[lightIndex], hitPoint, sampleDir, objectHitNormal, payload.color * vec4(colors[gl_InstanceID].rgb, 1.0f));
 
-	return sampleRadiance;// * lights.length();
+	return sampleRadiance * lights.length();
 }
 
 void main() {
@@ -93,7 +93,7 @@ void main() {
 
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-			//incomingRadiance += payload.color.rgb * max(payload.color.a, 0.0f);
+			incomingRadiance += payload.color.rgb * max(payload.color.a, 0.0f);
 		}
 	}
 	//incomingRadiance = sampleDir;

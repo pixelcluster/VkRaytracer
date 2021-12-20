@@ -58,8 +58,8 @@ vec3 weightBSDFLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 ob
 }
 
 vec3 weightBSDFEnvmap(vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 radiance) {
-	/*if(any(isnan(sampleDir)))
-		return vec3(0.0f);*/
+	if(any(isnan(sampleDir)))
+		return vec3(0.0f);
 
 	float bsdfFactor = microfacetBSDF(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 	float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
@@ -73,10 +73,10 @@ vec3 weightBSDFEnvmap(vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 
 		radiance.a = 0.0f;
 	}
 
-	/*if(bsdfPdf <= 0.0f)
-		return vec3(0.0f);*/
+	if(bsdfPdf <= 0.0f)
+		return vec3(0.0f);
 
-	return objectHitNormal;//(bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) / bsdfPdf) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
+	return (bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) / bsdfPdf) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
 }
 
 #endif
