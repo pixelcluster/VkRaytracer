@@ -46,7 +46,7 @@ int main() {
 					spheres[j + i * 15].position[0] += 10.0f;
 					spheres[j + i * 15].position[1] -= 4.0f;
 					spheres[j + i * 15].position[2] += 10.0f;
-					spheres[j + i * 15].color[3] = -5000.0f;
+					spheres[j + i * 15].color[3] = -5.0f;
 				}
 			}
 		}

@@ -5,8 +5,8 @@
 #extension GL_GOOGLE_include_directive : require
 
 const float eta_i = 1.0f;
-const float eta_t = 1.89;
-const float alpha = 0.41;
+const float eta_t = 1.81;
+const float alpha = 0.91;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -44,9 +44,9 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 		sampleDir = sampleSphere(hitPoint, lightData, payload.randomState);
 	}
 	payload.isLightSample = true;
-	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 
-	sampleRadiance += weightLight(lightIndex == lights.length(), lightData, hitPoint, sampleDir, objectHitNormal, payload.color * vec4(colors[gl_InstanceID].rgb, 1.0f));
+	sampleRadiance += weightLight(lightIndex == lights.length(), lightData, hitPoint, sampleDir, objectHitNormal, payload.color);
 
 	//Sample BSDF
 		
@@ -54,14 +54,14 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState));
 			
 	payload.isLightSample = true;
-	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 			
-	if(lightIndex == lights.length())
-		sampleRadiance += weightBSDFEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color * vec4(colors[gl_InstanceID].rgb, 1.0f));
+	/*if(lightIndex == lights.length())
+		sampleRadiance += weightBSDFEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);
 	else
-		sampleRadiance += weightBSDFLight(lights[lightIndex], hitPoint, sampleDir, objectHitNormal, payload.color * vec4(colors[gl_InstanceID].rgb, 1.0f));
+		sampleRadiance += weightBSDFLight(lights[lightIndex], hitPoint, sampleDir, objectHitNormal, payload.color);*/
 
-	return sampleRadiance * lights.length();
+	return sampleRadiance ;//* lights.length();
 }
 
 void main() {
@@ -74,28 +74,21 @@ void main() {
 
 	vec3 incomingRadiance = vec3(0.0f);
 
-	incomingRadiance += payload.rayThroughput * sampleLight(hitPoint, objectHitNormal);
+	incomingRadiance += /*payload.rayThroughput * */sampleLight(hitPoint, objectHitNormal);
 
 	payload.isLightSample = false;
 	
-	//vec3 sampleDir = sampleMicrofacetDistribution(gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState);//reflect(gl_WorldRayDirectionEXT, );
 	if(payload.recursionDepth++ < 7) {
 		uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
 
 		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState));
-		//ensure sampleDir is in the right hemisphere
-		sampleDir.y = -abs(sampleDir.y);
-		float bsdfFactor = microfacetBSDF(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
-		float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
-		if(bsdfPdf > 0.0f) {
-			payload.rayThroughput *= bsdfFactor * abs(dot(-gl_WorldRayDirectionEXT, objectHitNormal)) / bsdfPdf;
-			payload.rayThroughput = max(min(payload.rayThroughput, 1.0f), 0.0f);
 
-			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+		payload.rayThroughput *= min(microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal), 0.4f);
 
-			incomingRadiance += payload.color.rgb * max(payload.color.a, 0.0f);
-		}
+		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+
+		//incomingRadiance += payload.color.rgb * max(payload.color.a, 0.0f);
 	}
 	//incomingRadiance = sampleDir;
-	payload.color = vec4(incomingRadiance, 1.0f);
+	payload.color = vec4(incomingRadiance/* * colors[gl_InstanceID].rgb*/, 1.0f);
 }

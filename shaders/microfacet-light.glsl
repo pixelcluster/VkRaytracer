@@ -29,9 +29,9 @@ float smithG1Roughness1(vec3 wo, float tanTheta) {
 }
 //from pbrt
 float smithG(vec3 wi, vec3 wo, vec3 normal) {
-	float cosThetaIn = dot(wi, normal);
+	float cosThetaIn = abs(dot(wi, normal));
 	float sinThetaIn = sqrt(max(1.0f - cosThetaIn * cosThetaIn, 0.0f));
-	float cosThetaOut = dot(wo, normal);
+	float cosThetaOut = abs(dot(wo, normal));
 	float sinThetaOut = sqrt(max(1.0f - cosThetaOut * cosThetaOut, 0.0f));
 	float tanThetaIn = sinThetaIn / cosThetaIn;
 	float tanThetaOut = sinThetaOut / cosThetaOut;
@@ -45,9 +45,9 @@ float smithG(vec3 wi, vec3 wo, vec3 normal) {
 }
 
 float beckmannD(float cos2Theta, float sin2Theta) {
-	float tan2Theta = sin2Theta / cos2Theta;
+	float tan2Theta = abs(sin2Theta / cos2Theta);
 	if(isinf(tan2Theta)) return 0.0f;
-	return exp(-tan2Theta / (alpha * alpha)) / (PI * alpha * alpha * cos2Theta * cos2Theta);
+	return max(exp(-tan2Theta / (alpha * alpha)) / (PI * alpha * alpha * cos2Theta * cos2Theta), 0.001f);
 }
 
 
@@ -89,7 +89,7 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosThetaNormal = clamp(dot(microfacetNormal, normal), 0.0f, 1.0f);
 	float sinThetaNormal = sqrt(max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f));
 	
-	float fresnelFactor = fresnel(abs(dot(incidentDir, microfacetNormal)));
+	float fresnelFactor = fresnel(cosTheta);
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal * sinThetaNormal);
 	float mask = smithG(incidentDir, outgoingDir, normal);
 
@@ -123,8 +123,8 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 	float tanTheta = (sinTheta / scaledIncidentDir.y);
 	float cotTheta = 1.0f / tanTheta;
 
-	float cosPhi = scaledIncidentDir.x / sinTheta;
-	float sinPhi = -scaledIncidentDir.z / sinTheta;
+	float cosPhi = clamp(scaledIncidentDir.x / max(sinTheta, 0.000001f), -1.0f, 1.0f);
+	float sinPhi = clamp(-scaledIncidentDir.z / max(sinTheta, 0.000001f), -1.0f, 1.0f);
 
 	float erfCotTheta = erfApprox(cotTheta);
 
@@ -187,6 +187,17 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float mask = smithG1(incidentDir, sinTheta / cosTheta);
 
 	return distribution * mask * max(dot(incidentDir, microfacetNormal), 0.0f) / abs(dot(incidentDir, normal));
+}
+
+float microfacetWeight(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
+	vec3 microfacetNormal = (outgoingDir + incidentDir);
+	if(dot(microfacetNormal, microfacetNormal) < 1.e-5) return 0.0f;
+	microfacetNormal = normalize(microfacetNormal);
+
+	float cosTheta = abs(dot(incidentDir, microfacetNormal));
+	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
+
+	return smithG(incidentDir, outgoingDir, microfacetNormal) / smithG1(incidentDir, sinTheta / cosTheta);
 }
 
 #endif

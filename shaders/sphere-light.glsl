@@ -38,7 +38,7 @@ vec3 sampleSphere(vec3 hitOrigin, LightData lightData, inout uint randomState) {
 	float U1 = nextRand(randomState) * uintBitsToFloat(0x2f800004U);
 	float U2 = nextRand(randomState) * uintBitsToFloat(0x2f800004U);
 
-	if(dot(originToCenter, originToCenter) < lightData.radius * lightData.radius) {
+	if(abs(dot(originToCenter, originToCenter)) < lightData.radius * lightData.radius) {
 		float r = sqrt(max(U1 * (1.0f - U1), 0.0f));
 		return vec3(2.0f * cos(2.0f * PI * U2) * r, 2.0f * sin(2.0f * PI * U2) * r, U2 * 2.0f - 1.0f);
 	}
