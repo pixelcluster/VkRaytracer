@@ -6,7 +6,7 @@
 
 const float eta_i = 1.0f;
 const float eta_t = 1.89;
-const float alpha = 0.11;
+const float alpha = 0.01;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -35,6 +35,7 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	//Sample light
 	uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
 	//lightIndex == lights.length(): sample sky envmap
+	lightIndex = lights.length();
 	LightData lightData = LightData(vec4(0.0f), 0.0f);
 	if(lightIndex == lights.length()) {
 		sampleDir = sampleHemisphereUniform(objectHitNormal, payload.randomState);
@@ -43,10 +44,11 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 		lightData = lights[lightIndex];
 		sampleDir = sampleSphere(hitPoint, lightData, payload.randomState);
 	}
+	sampleDir = sampleHemisphereUniform(objectHitNormal, payload.randomState);
 	payload.isLightSample = true;
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 
-	sampleRadiance += weightLight(lightIndex == lights.length(), lightData, hitPoint, sampleDir, objectHitNormal, payload.color);
+	sampleRadiance += max(weightLight(lightIndex == lights.length(), lightData, hitPoint, sampleDir, objectHitNormal, payload.color), vec3(0.0f));
 
 	//Sample BSDF
 		
@@ -75,16 +77,16 @@ void main() {
 	else if(payload.isLightSample) {
 		payload.color = vec4(0.0f, 0.0f, 0.0f, 0.0f);
 	}
-	else {
+	else if(payload.recursionDepth++ < 7) {
 		vec3 incomingRadiance = vec3(0.0f);
-
+		
 		incomingRadiance += /*payload.rayThroughput * */sampleLight(hitPoint, objectHitNormal);
 
 		payload.isLightSample = false;
 		if(payload.recursionDepth++ < 7) {
 			vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState));
 		
-			payload.rayThroughput *= min(microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal), 0.4f);
+			payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 	
 			traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 

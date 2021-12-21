@@ -13,10 +13,10 @@ VkSwapchainKHR createSwapchain(VkPhysicalDevice physicalDevice, VkDevice device,
 	VkSurfaceCapabilitiesKHR capabilities;
 	verifyResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &capabilities));
 
-	assert(capabilities.minImageExtent.width <= imageExtent.width &&
+	if(!(capabilities.minImageExtent.width <= imageExtent.width &&
 		   capabilities.minImageExtent.height <= imageExtent.height &&
 		   capabilities.maxImageExtent.width >= imageExtent.width &&
-		   capabilities.maxImageExtent.height >= imageExtent.height);
+		   capabilities.maxImageExtent.height >= imageExtent.height)) return oldSwapchain;
 
 	size_t imageCount = capabilities.minImageCount + 1;
 	if (capabilities.maxImageCount && imageCount > capabilities.maxImageCount) {

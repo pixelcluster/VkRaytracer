@@ -18,6 +18,7 @@ vec3 weightLight(bool sampledHemisphere, LightData lightData, vec3 hitPoint, vec
 	if(any(isnan(sampleDir))) {
 		debugPrintfEXT("NaN in sampleDir light!\n");
 	}
+	float bsdfFactor = microfacetBSDF(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 	float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 	float lightPdf;
 
@@ -35,11 +36,12 @@ vec3 weightLight(bool sampledHemisphere, LightData lightData, vec3 hitPoint, vec
 		radiance.a = max(1.0f - max(radiance.a, 0.0f), 0.0f);
 	}
 
-	if(lightPdf <= 0.0f || bsdfPdf <= 0.0f) {
-		//return vec3(0.0f);
+	return bsdfPdf.xxx;
+	if(lightPdf <= 0.0f || bsdfPdf <= 0.000005f) {
+		return vec3(0.0f);
 	}
 
-	return microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal).xxx;// * (radiance.rgb * radiance.a) * powerHeuristic(1, lightPdf, 1, bsdfPdf);
+	return bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) * powerHeuristic(1, lightPdf, 1, bsdfPdf) / lightPdf;
 }
 
 vec3 weightBSDFLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 radiance) {
@@ -49,7 +51,7 @@ vec3 weightBSDFLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 ob
 	//todo: NEE should discard the ray even if a different light than the chosen one was hit
 	radiance.a = max(radiance.a, 0.0f); //zero radiance if ray didn't hit light
 
-	if(lightPdf > 0.0f && bsdfPdf > 0.0f)
+	if(lightPdf > 0.0f && bsdfPdf > 0.000005f)
 		return microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal) * (radiance.rgb * radiance.a) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
 	else
 		return 0.0f.xxx;
@@ -69,7 +71,7 @@ vec3 weightBSDFEnvmap(vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 
 		radiance.a = 0.0f;
 	}
 
-	if(bsdfPdf <= 0.0f)
+	if(bsdfPdf <= 0.000005f)
 		return vec3(0.0f);
 
 	return microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal) * (radiance.rgb * radiance.a) * powerHeuristic(1, bsdfPdf, 1, lightPdf);

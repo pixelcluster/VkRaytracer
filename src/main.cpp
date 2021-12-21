@@ -44,9 +44,9 @@ int main() {
 				if (j + i == 0 || (j + i * 15) == 19) { // if ((j + i * 50) % 2) {
 					//negative color.a indicates radiance
 					spheres[j + i * 15].position[0] += 10.0f;
-					spheres[j + i * 15].position[1] -= 4.0f;
+					spheres[j + i * 15].position[1] -= 0.0f;
 					spheres[j + i * 15].position[2] += 10.0f;
-					spheres[j + i * 15].color[3] = -5.0f;
+					spheres[j + i * 15].color[3] = -5000.0f;
 				}
 			}
 		}
