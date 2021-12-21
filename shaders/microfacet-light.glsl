@@ -29,9 +29,9 @@ float smithG1Roughness1(vec3 wo, float tanTheta) {
 }
 //from pbrt
 float smithG(vec3 wi, vec3 wo, vec3 normal) {
-	float cosThetaIn = dot(wi, normal);
+	float cosThetaIn = abs(dot(wi, normal));
 	float sinThetaIn = sqrt(max(1.0f - cosThetaIn * cosThetaIn, 0.0f));
-	float cosThetaOut = dot(wo, normal);
+	float cosThetaOut = abs(dot(wo, normal));
 	float sinThetaOut = sqrt(max(1.0f - cosThetaOut * cosThetaOut, 0.0f));
 	float tanThetaIn = sinThetaIn / cosThetaIn;
 	float tanThetaOut = sinThetaOut / cosThetaOut;
@@ -46,7 +46,6 @@ float smithG(vec3 wi, vec3 wo, vec3 normal) {
 
 float beckmannD(float cos2Theta, float sin2Theta) {
 	float tan2Theta = abs(sin2Theta / cos2Theta);
-	return tan2Theta;
 	if(isinf(tan2Theta) || tan2Theta == 0.0f) return 0.0f;
 	return exp(-tan2Theta / (alpha * alpha)) / (PI * alpha * alpha * cos2Theta * cos2Theta);
 }
@@ -181,13 +180,13 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosTheta = abs(dot(incidentDir, microfacetNormal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
-	float cosThetaNormal = abs(dot(microfacetNormal, normal));
+	float cosThetaNormal = max(dot(microfacetNormal, normal), 0.0f);
 	float sinThetaNormal2 = max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f);
 	
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);
 	float mask = smithG1(incidentDir, sinTheta / cosTheta);
 
-	return distribution;//distribution * mask * (dot(incidentDir, microfacetNormal), 0.0f) / abs(dot(incidentDir, normal));
+	return distribution * mask * max(dot(incidentDir, microfacetNormal), 0.0f) / abs(dot(incidentDir, normal));
 }
 
 float microfacetWeight(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
@@ -198,7 +197,7 @@ float microfacetWeight(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosTheta = abs(dot(incidentDir, microfacetNormal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
-	return fresnel(abs(dot(outgoingDir, normal))) * smithG(incidentDir, outgoingDir, normal) / smithG1(incidentDir, sinTheta / cosTheta);
+	return smithG(incidentDir, outgoingDir, normal) / smithG1(incidentDir, sinTheta / cosTheta);
 }
 
 #endif

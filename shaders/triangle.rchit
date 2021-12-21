@@ -6,7 +6,7 @@
 
 const float eta_i = 1.0f;
 const float eta_t = 1.81;
-const float alpha = 0.11f;
+const float alpha = 0.01f;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -43,10 +43,16 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 		lightData = lights[lightIndex];
 		sampleDir = sampleSphere(hitPoint, lightData, payload.randomState);
 	}
+
 	payload.isLightSample = true;
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
-
-	sampleRadiance += weightLight(lightIndex == lights.length(), lightData, hitPoint, sampleDir, objectHitNormal, payload.color);
+	
+	if(lightIndex == lights.length()) {
+		sampleRadiance += weightLightEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);
+	}
+	else {
+		sampleRadiance += weightLight(lightData, hitPoint, sampleDir, objectHitNormal, payload.color);
+	}
 
 	//Sample BSDF
 		
