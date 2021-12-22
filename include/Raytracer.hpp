@@ -38,6 +38,8 @@ class HardwareSphereRaytracer {
 
 	void recreateAccumulationImage();
 
+	void resetSampleCount();
+
 	constexpr size_t vertexDataSize();
 	constexpr size_t indexDataSize();
 	constexpr size_t transformDataSize();
@@ -145,6 +147,7 @@ class HardwareSphereRaytracer {
 	float m_worldPos[3] = { 0.0f, 2.0f, -5.0f };
 	double m_lastTime = 0.0f;
 	uint32_t m_accumulatedSampleCount = 0;
+	uint32_t m_maxSamples = 256;
 
 	RayTracingDevice m_device;
 };

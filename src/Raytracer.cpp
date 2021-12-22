@@ -759,7 +759,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	}
 	if (frameData.windowSizeChanged) {
 		recreateAccumulationImage();
-		m_accumulatedSampleCount = 0;
+		resetSampleCount();
 	}
 
 	double currentTime = glfwGetTime();
@@ -768,30 +768,34 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 
 	if (m_device.window().keyPressed(GLFW_KEY_W)) {
 		m_worldPos[2] += 2.0f * deltaTime;
-		m_accumulatedSampleCount = 0;
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_S)) {
 		m_worldPos[2] -= 2.0f * deltaTime;
-		m_accumulatedSampleCount = 0;
+		resetSampleCount();
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_A)) {
 		m_worldPos[0] -= 2.0f * deltaTime;
-		m_accumulatedSampleCount = 0;
+		resetSampleCount();
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_D)) {
 		m_worldPos[0] += 2.0f * deltaTime;
-		m_accumulatedSampleCount = 0;
+		resetSampleCount();
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_LEFT_SHIFT)) {
 		m_worldPos[1] += 2.0f * deltaTime;
-		m_accumulatedSampleCount = 0;
+		resetSampleCount();
 	}
 	if (m_device.window().keyPressed(GLFW_KEY_LEFT_CONTROL)) {
 		m_worldPos[1] -= 2.0f * deltaTime;
-		m_accumulatedSampleCount = 0;
+		resetSampleCount();
 	}
 
-	++m_accumulatedSampleCount;
+	if (m_accumulatedSampleCount < m_maxSamples)
+		++m_accumulatedSampleCount;
+	else if (m_accumulatedSampleCount != -1U) {
+		printf("Max. sample count reached.\n");
+		m_accumulatedSampleCount = -1U;
+	}
 
 	// Write descriptor sets
 
@@ -1279,4 +1283,8 @@ void HardwareSphereRaytracer::recreateAccumulationImage() {
 																		.baseArrayLayer = 0,
 																		.layerCount = 1 } };
 	verifyResult(vkCreateImageView(m_device.device(), &imageViewCreateInfo, nullptr, &m_accumulationImageView));
+}
+
+void HardwareSphereRaytracer::resetSampleCount() {
+	m_accumulatedSampleCount = 0; 
 }

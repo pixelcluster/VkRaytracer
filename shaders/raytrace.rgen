@@ -26,10 +26,16 @@ void nextRand(inout uint randomState) {
 	randomState = ((((randomState ^ randomState >> c)) ^ (c << 32 - c)) * 104122896) ^ (c << 7);
 }
 
-const uint nSamples = 1;
+const uint nSamples = 16;
 
 void main() {
 	vec4 prevAccumulatedRadiance = imageLoad(accumulationImage, ivec2(gl_LaunchIDEXT.xy));
+
+	if(accumulatedSampleCount == -1U) {
+		imageStore(outputImage, ivec2(gl_LaunchIDEXT.xy), prevAccumulatedRadiance / (prevAccumulatedRadiance + vec4(1.0f, 1.0f, 1.0f, 0.0f)));
+		return;
+	}
+
 	vec2 point = (vec2(gl_LaunchIDEXT.xy) / vec2(gl_LaunchSizeEXT.xy)) * 2.0f.xx - 1.0f.xx;
 	vec3 origin = vec3(0.0f, 0.0f, 0.1f) + vec3(point * vec2(tanHalfFoV * aspectRatio, tanHalfFoV), 0.0f) * 0.1f;
 	vec3 projected = vec3(0.0f, 0.0f, 1.0f) + vec3(point * vec2(tanHalfFoV * aspectRatio, tanHalfFoV), 0.0f);

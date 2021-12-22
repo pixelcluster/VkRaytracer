@@ -89,7 +89,7 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosThetaNormal = abs(dot(microfacetNormal, normal));
 	float sinThetaNormal = sqrt(max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f));
 	
-	float fresnelFactor = fresnel(cosTheta);
+	float fresnelFactor = fresnel(cosThetaMicrofacet);
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal * sinThetaNormal);
 	float mask = smithG(incidentDir, outgoingDir, normal);
 
@@ -180,7 +180,7 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosTheta = abs(dot(incidentDir, microfacetNormal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
-	float cosThetaNormal = max(dot(microfacetNormal, normal), 0.0f);
+	float cosThetaNormal = abs(dot(microfacetNormal, normal));
 	float sinThetaNormal2 = max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f);
 	
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);

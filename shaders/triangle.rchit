@@ -6,7 +6,7 @@
 
 const float eta_i = 1.0f;
 const float eta_t = 1.81;
-const float alpha = 0.01f;
+const float alpha = 0.6f;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -33,7 +33,7 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	vec3 sampleDir;
 
 	//Sample light
-	uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length() - 1);
+	uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
 	//lightIndex == lights.length(): sample sky envmap
 	if(lightIndex == lights.length()) {
 		sampleDir = sampleHemisphereUniform(objectHitNormal, payload.randomState);
@@ -92,7 +92,7 @@ void main() {
 
 		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState));
 
-		payload.rayThroughput *= min(microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal), 0.4f);
+		payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 
 		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 

@@ -55,7 +55,6 @@ vec3 sampleSphere(vec3 hitOrigin, LightData lightData, inout uint randomState) {
 		float sinAlpha = sqrt(max(1.0f - cosAlpha * cosAlpha, 0.0f));
 
 		vec3 samplePointOnSphere = vec3(sinAlpha * cos(phi), abs(cosAlpha), -sinAlpha * sin(phi));
-		samplePointOnSphere *= 0.5f;
 		return normalize((samplePointOnSphere * lightData.radius + lightPos) - hitOrigin);
 	}
 }
