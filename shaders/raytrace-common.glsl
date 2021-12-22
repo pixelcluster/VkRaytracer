@@ -19,13 +19,13 @@ vec3 weightLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 object
 	float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 	
 	float lightPdf = pdfSphere(hitPoint, sampleDir, lightData);
-	radiance.a = max(1.0f - max(radiance.a, 0.0f), 0.0f);
-	
 	if(lightPdf <= 0.0f || bsdfPdf <= 0.0f) {
-		return vec3(0.0f);
+		return 0.0f.xxx;
+			//return vec3(0.0f);
 	}
+	radiance.a = max(1.0f - max(radiance.a, 0.0f), 0.0f);
 
-	return bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) * powerHeuristic(1, lightPdf, 1, bsdfPdf) / lightPdf;
+	return 100.0f.xxx;//bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) * powerHeuristic(1, lightPdf, 1, bsdfPdf) / lightPdf;
 }
 
 vec3 weightLightEnvmap(vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 radiance) {
@@ -44,7 +44,7 @@ vec3 weightLightEnvmap(vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4
 		return vec3(0.0f);
 	}
 
-	return bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) * powerHeuristic(1, lightPdf, 1, bsdfPdf) / lightPdf;
+	return .0f.xxx;//bsdfFactor * abs(dot(sampleDir, objectHitNormal)) * (radiance.rgb * radiance.a) * powerHeuristic(1, lightPdf, 1, bsdfPdf) / lightPdf;
 }
 
 vec3 weightBSDFLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 radiance) {
@@ -55,7 +55,7 @@ vec3 weightBSDFLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 ob
 	radiance.a = max(radiance.a, 0.0f); //zero radiance if ray didn't hit light
 
 	if(lightPdf > 0.0f && bsdfPdf > 0.000005f)
-		return microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal) * (radiance.rgb * radiance.a) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
+		return .0f.xxx;//microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal) * (radiance.rgb * radiance.a) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
 	else
 		return 0.0f.xxx;
 }
@@ -77,7 +77,7 @@ vec3 weightBSDFEnvmap(vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 
 	if(bsdfPdf <= 0.000005f)
 		return vec3(0.0f);
 
-	return microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal) * (radiance.rgb * radiance.a) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
+	return .0f.xxx;//microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal) * (radiance.rgb * radiance.a) * powerHeuristic(1, bsdfPdf, 1, lightPdf);
 }
 
 #endif

@@ -33,13 +33,13 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	vec3 sampleDir;
 
 	//Sample light
-	uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
+	uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length() - 1);
 	//lightIndex == lights.length(): sample sky envmap
-	LightData lightData = LightData(vec4(0.0f), 0.0f);
 	if(lightIndex == lights.length()) {
 		sampleDir = sampleHemisphereUniform(objectHitNormal, payload.randomState);
 	}
 	else {
+		LightData lightData = LightData(vec4(0.0f), 0.0f);
 		lightData = lights[lightIndex];
 		sampleDir = sampleSphere(hitPoint, lightData, payload.randomState);
 	}
@@ -51,6 +51,8 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 		sampleRadiance += weightLightEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);
 	}
 	else {
+		LightData lightData = LightData(vec4(0.0f), 0.0f);
+		lightData = lights[lightIndex];
 		sampleRadiance += weightLight(lightData, hitPoint, sampleDir, objectHitNormal, payload.color);
 	}
 

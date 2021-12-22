@@ -69,7 +69,7 @@ float pdfSphere(vec3 hitOrigin, vec3 sampleDir, LightData lightData) {
 	float discriminant = pow(dot(sampleDir, centerToOrigin), 2) - (dot(centerToOrigin, centerToOrigin) - lightData.radius * lightData.radius);
 
 	if(discriminant < 0.0f) {
-		return 0.0f;
+		return discriminant;
 	}
 
 	if(dot(originToCenter, originToCenter) < lightData.radius * lightData.radius) {

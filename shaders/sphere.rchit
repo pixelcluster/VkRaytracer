@@ -12,6 +12,8 @@ const float alpha = 0.001;
 #define USE_WEIGHTING
 #include "raytrace-common.glsl"
 
+#line 15
+
 layout(std430, set = 0, binding = 3) buffer SphereBuffer {
 	vec4 colors[];
 };
@@ -33,26 +35,34 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	vec3 sampleDir;
 
 	//Sample light
-	uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
+	uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length() - 1);
 	//lightIndex == lights.length(): sample sky envmap
-	LightData lightData = LightData(vec4(0.0f), 0.0f);
-	lightIndex = lights.length();
-	if(lightIndex == lights.length()) {
+
+	int wtf = int(lightIndex);
+
+	if(lights.length() == lightIndex) {
 		sampleDir = sampleHemisphereUniform(objectHitNormal, payload.randomState);
 	}
 	else {
+		LightData lightData = LightData(vec4(0.0f), 0.0f);
 		lightData = lights[lightIndex];
 		sampleDir = sampleSphere(hitPoint, lightData, payload.randomState);
 	}
-	sampleDir = sampleHemisphereUniform(objectHitNormal, payload.randomState);
+
+	debugPrintfEXT("wtf before: %i\n", wtf);
 
 	payload.isLightSample = true;
-	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint, 0, sampleDir, 999999999.0f, 0);
+	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
+	
+	debugPrintfEXT("wtf after: %i\n", wtf);
 
-	if(lightIndex == lights.length()) {
+	if(lights.length() == lightIndex) {
 		sampleRadiance += weightLightEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);
 	}
 	else {
+		sampleRadiance += float(1.0f);
+		LightData lightData = LightData(vec4(0.0f), 0.0f);
+		lightData = lights[lightIndex];
 		sampleRadiance += weightLight(lightData, hitPoint, sampleDir, objectHitNormal, payload.color);
 	}
 
@@ -69,7 +79,7 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	else
 		sampleRadiance += weightBSDFLight(lights[lightIndex], hitPoint, sampleDir, objectHitNormal, payload.color);*/
 
-	return sampleRadiance * lights.length();
+	return sampleRadiance;// * lights.length();
 }
 
 void main() {
@@ -81,12 +91,12 @@ void main() {
 		payload.color = vec4(colors[gl_InstanceID].rgb * -colors[gl_InstanceID].a, 0.0f);
 	}
 	else if(payload.isLightSample) {
-		payload.color = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+		payload.color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 	}
 	else if(payload.recursionDepth++ < 7) {
 		vec3 incomingRadiance = vec3(0.0f);
 		
-		incomingRadiance += payload.rayThroughput * sampleLight(hitPoint, objectHitNormal);
+		incomingRadiance += /*payload.rayThroughput * */sampleLight(hitPoint, objectHitNormal);
 
 		payload.isLightSample = false;
 		if(payload.recursionDepth++ < 7) {
