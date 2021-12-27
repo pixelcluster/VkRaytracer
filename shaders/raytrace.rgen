@@ -32,7 +32,9 @@ void main() {
 	vec4 prevAccumulatedRadiance = imageLoad(accumulationImage, ivec2(gl_LaunchIDEXT.xy));
 
 	if(accumulatedSampleCount == -1U) {
-		imageStore(outputImage, ivec2(gl_LaunchIDEXT.xy), prevAccumulatedRadiance / (prevAccumulatedRadiance + vec4(1.0f, 1.0f, 1.0f, 0.0f)));
+		//prevAccumulatedRadiance = prevAccumulatedRadiance / (prevAccumulatedRadiance + vec4(1.0f, 1.0f, 1.0f, 0.0f));
+		prevAccumulatedRadiance = pow(prevAccumulatedRadiance, 1.0f / 2.2f.xxxx);
+		imageStore(outputImage, ivec2(gl_LaunchIDEXT.xy), prevAccumulatedRadiance);
 		return;
 	}
 
@@ -64,6 +66,7 @@ void main() {
 	
 	imageStore(accumulationImage, ivec2(gl_LaunchIDEXT.xy), accumulatedRadiance);
 
-	accumulatedRadiance = accumulatedRadiance / (accumulatedRadiance + vec4(1.0f, 1.0f, 1.0f, 0.0f));
+	//accumulatedRadiance = accumulatedRadiance / (accumulatedRadiance + vec4(1.0f, 1.0f, 1.0f, 0.0f));
+	accumulatedRadiance = pow(accumulatedRadiance, 1.0f / 2.2f.xxxx);
 	imageStore(outputImage, ivec2(gl_LaunchIDEXT.xy), accumulatedRadiance);
 }

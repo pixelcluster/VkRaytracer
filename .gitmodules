@@ -4,3 +4,6 @@
 [submodule "dependencies/volk"]
 	path = dependencies/volk
 	url = https://github.com/zeux/volk.git
+[submodule "dependencies/cgltf"]
+	path = dependencies/cgltf
+	url = https://github.com/jkuhlmann/cgltf.git

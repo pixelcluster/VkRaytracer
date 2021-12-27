@@ -182,8 +182,8 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		deviceExtensionNames.reserve(1);
 	}
 	deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-	/*deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
-	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);*/
+	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
+	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
 
 	VkDeviceDiagnosticsConfigFlagsNV aftermathFlags =
 		VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_RESOURCE_TRACKING_BIT_NV |	   // Enable tracking of resources.
@@ -192,11 +192,11 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_SHADER_DEBUG_INFO_BIT_NV;	   // Generate debug information for shaders.
 	VkDeviceDiagnosticsConfigCreateInfoNV aftermathInfo = {};
 	aftermathInfo.sType = VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV;
-	// aftermathInfo.pNext = &features;
+	aftermathInfo.pNext = &features;
 	aftermathInfo.flags = aftermathFlags;
 
 	VkDeviceCreateInfo deviceCreateInfo = { .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-											.pNext = &features,
+											.pNext = &aftermathInfo,
 											.queueCreateInfoCount = 1,
 											.pQueueCreateInfos = &deviceQueueCreateInfo,
 											.enabledLayerCount = static_cast<uint32_t>(instanceLayerNames.size()),

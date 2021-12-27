@@ -81,19 +81,22 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
 	vec3 microfacetNormal = (outgoingDir + incidentDir);
-	if(dot(microfacetNormal, microfacetNormal) < 1.e-5 || cosThetaI == 0.0f || cosTheta == 0.0f) return 1.0f;
+	if (dot(microfacetNormal, microfacetNormal) < 1.e-5 || cosThetaI == 0.0f || cosTheta == 0.0f) return 1.0f;
 	microfacetNormal = normalize(microfacetNormal);
 
-	float cosThetaMicrofacet = abs(dot(outgoingDir, microfacetNormal));
+	if (dot(microfacetNormal, normal) < 0.0f)
+		microfacetNormal = microfacetNormal * -1.0f;
 
-	float cosThetaNormal = abs(dot(microfacetNormal, normal));
-	float sinThetaNormal = sqrt(max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f));
-	
+	float cosThetaMicrofacet = abs(dot(incidentDir, microfacetNormal));
+
+	float cosThetaNormal = clamp(dot(microfacetNormal, normal), 0.0f, 1.0f);
+	float sinThetaNormal2 = max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f);
+
 	float fresnelFactor = fresnel(cosThetaMicrofacet);
-	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal * sinThetaNormal);
-	float mask = smithG(incidentDir, outgoingDir, normal);
+	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);
+	float mask = smithG(outgoingDir, incidentDir, normal);
 
-	return (fresnelFactor * distribution * mask) / (4 * cosThetaI * cosTheta);
+	return (distribution * fresnelFactor * mask) / (4 * cosThetaI * cosTheta);
 }
 
 //algorithm from https://hal.inria.fr/file/index/docid/996995/filename/article.pdf
@@ -177,22 +180,28 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	if(dot(microfacetNormal, microfacetNormal) < 1.e-5) return 0.0f;
 	microfacetNormal = normalize(microfacetNormal);
 
-	float cosTheta = abs(dot(incidentDir, microfacetNormal));
+	if (dot(microfacetNormal, normal) < 0.0f)
+		microfacetNormal = microfacetNormal * -1.0f;
+
+	float cosTheta = abs(dot(outgoingDir, microfacetNormal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
 	float cosThetaNormal = abs(dot(microfacetNormal, normal));
 	float sinThetaNormal2 = max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f);
 	
 	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);
-	float mask = smithG1(incidentDir, sinTheta / cosTheta);
+	float mask = smithG1(outgoingDir, sinTheta / cosTheta);
 
-	return distribution * mask * max(dot(incidentDir, microfacetNormal), 0.0f) / abs(dot(incidentDir, normal));
+	return distribution * mask * max(dot(outgoingDir, microfacetNormal), 0.0f) / (abs(dot(outgoingDir, normal)) * 4 * dot(outgoingDir, microfacetNormal));
 }
 
 float microfacetWeight(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	vec3 microfacetNormal = (outgoingDir + incidentDir);
 	if(dot(microfacetNormal, microfacetNormal) < 1.e-5) return 0.0f;
 	microfacetNormal = normalize(microfacetNormal);
+	
+	if (dot(microfacetNormal, normal) < 0.0f)
+		microfacetNormal = microfacetNormal * -1.0f;
 
 	float cosTheta = abs(dot(incidentDir, microfacetNormal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));

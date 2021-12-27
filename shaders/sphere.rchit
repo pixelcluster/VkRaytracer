@@ -47,7 +47,7 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	}
 
 	payload.isLightSample = true;
-	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint, 0, sampleDir, 999999999.0f, 0);
+	traceRayEXT(tlasStructure, gl_RayFlagsTerminateOnFirstHitEXT, 0xFF, 0, 0, 0, hitPoint, 0, sampleDir, 999999999.0f, 0);
 
 	if(lights.length() == lightIndex) {
 		sampleRadiance += weightLightEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);
@@ -64,7 +64,7 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState));
 
 	payload.isLightSample = true;
-	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint, 0, sampleDir, 999999999.0f, 0);
+	traceRayEXT(tlasStructure, gl_RayFlagsTerminateOnFirstHitEXT, 0xFF, 0, 0, 0, hitPoint, 0, sampleDir, 999999999.0f, 0);
 
 	if(lightIndex == lights.length())
 		sampleRadiance += weightBSDFEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);

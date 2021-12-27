@@ -24,8 +24,7 @@ AccelerationStructureBatchData AccelerationStructureManager::createData(
 		VkAccelerationStructureBuildGeometryInfoKHR geometryInfo = {
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			.type = initInfos[i].type,
-			.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
-					 VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR,
 			.geometryCount = static_cast<uint32_t>(initInfos[i].geometries.size()),
 			.pGeometries = initInfos[i].geometries.data()
 		};

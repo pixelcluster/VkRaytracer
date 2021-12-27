@@ -18,7 +18,8 @@ struct TriangleObject {
 
 class HardwareSphereRaytracer {
   public:
-	HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount, std::vector<size_t> emissiveSphereIndices);
+	HardwareSphereRaytracer(size_t windowWidth, size_t windowHeight, size_t sphereCount,
+							std::vector<size_t> emissiveSphereIndices);
 	~HardwareSphereRaytracer();
 	// RayTracingDevice already deletes/defaults copy/move constructors
 
@@ -144,10 +145,10 @@ class HardwareSphereRaytracer {
 	VkCommandPool m_oneTimeSubmitPool;
 	VkFence m_oneTimeSubmitFence;
 
-	float m_worldPos[3] = { 0.0f, 2.0f, -5.0f };
+	float m_worldPos[3] = { 2.7f, 5.8f, -1.2f };
 	double m_lastTime = 0.0f;
 	uint32_t m_accumulatedSampleCount = 0;
-	uint32_t m_maxSamples = 256;
+	uint32_t m_maxSamples = 1024;
 
 	RayTracingDevice m_device;
 };

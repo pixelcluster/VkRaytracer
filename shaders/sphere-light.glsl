@@ -53,9 +53,21 @@ vec3 sampleSphere(vec3 hitOrigin, LightData lightData, inout uint randomState) {
 		float distanceToSamplePoint = distanceToCenter * cosTheta - sqrt(max(lightData.radius * lightData.radius - dot(originToCenter, originToCenter) * sinTheta * sinTheta, 0.0f));
 		float cosAlpha = (dot(originToCenter, originToCenter) + lightData.radius * lightData.radius - distanceToSamplePoint * distanceToSamplePoint) / (2 * distanceToCenter * lightData.radius);
 		float sinAlpha = sqrt(max(1.0f - cosAlpha * cosAlpha, 0.0f));
+		originToCenter = normalize(originToCenter);
 
-		vec3 samplePointOnSphere = vec3(sinAlpha * cos(phi), abs(cosAlpha), -sinAlpha * sin(phi));
-		return normalize((samplePointOnSphere * lightData.radius + lightPos) - hitOrigin);
+		vec3 orthogonal1;
+		if(abs(originToCenter.x) > abs(originToCenter.y))
+			orthogonal1 = normalize(vec3(originToCenter.y, -originToCenter.x, 0.0f));
+		else
+			orthogonal1 = normalize(vec3(0.0f, -originToCenter.y, originToCenter.z));
+
+		vec3 orthogonal2 = cross(originToCenter, orthogonal1);
+
+		vec3 samplePointOnSphere = sinAlpha * cos(phi) * orthogonal1 +
+			abs(cosAlpha) * originToCenter +
+			-sinAlpha * sin(phi) * orthogonal2;
+
+		return normalize(-samplePointOnSphere * lightData.radius + lightPos - hitOrigin);
 	}
 }
 
@@ -68,7 +80,7 @@ float pdfSphere(vec3 hitOrigin, vec3 sampleDir, LightData lightData) {
 	float discriminant = pow(dot(sampleDir, centerToOrigin), 2) - (dot(centerToOrigin, centerToOrigin) - lightData.radius * lightData.radius);
 
 	if(discriminant < 0.0f) {
-		return discriminant;
+		return 2.0f;
 	}
 
 	if(dot(originToCenter, originToCenter) < lightData.radius * lightData.radius) {
@@ -76,8 +88,8 @@ float pdfSphere(vec3 hitOrigin, vec3 sampleDir, LightData lightData) {
 	}
 	else {
 		//cone PDF, also pbrt
-		float sinThetaMax2 = clamp((lightData.radius * lightData.radius) / dot(originToCenter, originToCenter), 0.0f, 1.0f);
-		float cosThetaMax = clamp(sqrt(max(1.0f - sinThetaMax2, 0.0f)), 0.0f, 1.0f);
+		float sinThetaMax2 = (lightData.radius * lightData.radius) / dot(originToCenter, originToCenter);
+		float cosThetaMax = sqrt(max(1.0f - sinThetaMax2, 0.0f));
 		return 1.0f / (2.0f * PI * (1.0f - cosThetaMax));
 	}
 }

@@ -192,7 +192,6 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	VkDescriptorSet descriptorSets[frameInFlightCount + 1];
 
 	verifyResult(vkAllocateDescriptorSets(m_device.device(), &descriptorSetAllocateInfo, descriptorSets));
-
 	std::memcpy(m_descriptorSets, descriptorSets, frameInFlightCount * sizeof(VkDescriptorSet));
 	m_geometryDescriptorSet = descriptorSets[frameInFlightCount];
 
@@ -210,9 +209,10 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 							.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
 							.geometry = { .aabbs = { VkAccelerationStructureGeometryAabbsDataKHR{
 											  .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
-											  .stride = sizeof(VkAabbPositionsKHR) } } } } },
+											  .stride = sizeof(VkAabbPositionsKHR) } } },
+							.flags = VK_GEOMETRY_OPAQUE_BIT_KHR } },
 		  .maxPrimitiveCount = 1,
-		  .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR },
+		  .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR},
 		{ .geometries = { { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
 							.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
 							.geometry = { .triangles = { VkAccelerationStructureGeometryTrianglesDataKHR{
@@ -221,7 +221,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 											  .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
 											  .vertexStride = 3 * sizeof(float),
 											  .maxVertex = 3,
-											  .indexType = VK_INDEX_TYPE_UINT16 } } } } },
+											  .indexType = VK_INDEX_TYPE_UINT16 } } },
+							.flags = VK_GEOMETRY_OPAQUE_BIT_KHR } },
 		  .maxPrimitiveCount = 2,
 		  .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR }
 	};
@@ -234,7 +235,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 						  .geometry = { .instances = { VkAccelerationStructureGeometryInstancesDataKHR{
 											.sType =
 												VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
-											.arrayOfPointers = VK_FALSE } } } } },
+											.arrayOfPointers = VK_FALSE } } },
+						  .flags = VK_GEOMETRY_OPAQUE_BIT_KHR } },
 		.maxPrimitiveCount = static_cast<uint32_t>(objectCount),
 		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR
 	};
@@ -410,9 +412,9 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	// clang-format off
 	// vertices
 	float vertices[4][4] = {
-		{ 2500.0f, 0.0f,  2500.0f, 1.0f},
-		{ 2500.0f, 0.0f,  -5.0f,   1.0f},
-		{ -5.0f,   0.0f,  2500.0f, 1.0f},
+		{ 35.0f, 0.0f,  35.0f, 1.0f},
+		{ 35.0f, 0.0f,  -5.0f,   1.0f},
+		{ -5.0f,   0.0f,  35.0f, 1.0f},
 		{ -5.0f,   0.0f,  -5.0f,   1.0f}
 	};
 	std::memcpy(triangleVertexDataPointer, vertices, vertexDataSize());
@@ -571,6 +573,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 														{ 0.0f, 0.0f, 1.0f, 0.0f } } },
 							 .instanceCustomIndex = static_cast<uint32_t>(j),
 							 .mask = 0xFF,
+							 // .flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR,
 							 .accelerationStructureReference =
 								 m_blasStructureData.structures[m_sphereBLASIndex].deviceAddress };
 		}
@@ -581,6 +584,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 										   .instanceCustomIndex = static_cast<uint32_t>(j),
 										   .mask = 0xFF,
 										   .instanceShaderBindingTableRecordOffset = 1,
+										   //.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR,
 										   .accelerationStructureReference =
 											   m_blasStructureData.structures[m_planeBLASIndex].deviceAddress };
 		}
@@ -652,7 +656,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 1, &copyMemoryBarrier,
 						 0, nullptr);
 
-	// vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(6));
+	vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(6));
 
 	vkCmdBuildAccelerationStructuresKHR(submitCommandBuffer, static_cast<uint32_t>(blasBuildInfos.size()),
 										blasBuildInfos.data(), ptrBLASRangeInfo.data());
@@ -668,7 +672,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr,
 						 static_cast<uint32_t>(tlasBuildBarriers.size()), tlasBuildBarriers.data(), 0, nullptr);
 
-	// vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(7));
+	vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(7));
 
 	VkBufferMemoryBarrier normalCopyBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
 												.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -682,7 +686,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 1, &normalCopyBarrier, 0,
 						 nullptr);
 
-	// vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(8));
+	vkCmdSetCheckpointNV(submitCommandBuffer, reinterpret_cast<void*>(8));
 
 	verifyResult(vkEndCommandBuffer(submitCommandBuffer));
 
@@ -815,28 +819,28 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 															VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR };
 
 	VkDescriptorImageInfo accumulationImageInfo = { .sampler = m_imageSampler,
-										.imageView = m_accumulationImageView,
-										.imageLayout = VK_IMAGE_LAYOUT_GENERAL };
+													.imageView = m_accumulationImageView,
+													.imageLayout = VK_IMAGE_LAYOUT_GENERAL };
 
 	VkWriteDescriptorSet accumulationImageWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-										.dstSet = m_descriptorSets[frameData.frameIndex],
-										.dstBinding = 1,
-										.dstArrayElement = 0,
-										.descriptorCount = 1,
-										.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-										.pImageInfo = &accumulationImageInfo };
+													.dstSet = m_descriptorSets[frameData.frameIndex],
+													.dstBinding = 1,
+													.dstArrayElement = 0,
+													.descriptorCount = 1,
+													.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+													.pImageInfo = &accumulationImageInfo };
 
 	VkDescriptorImageInfo swapchainImageInfo = { .sampler = m_imageSampler,
-										.imageView = frameData.swapchainImageView,
-										.imageLayout = VK_IMAGE_LAYOUT_GENERAL };
+												 .imageView = frameData.swapchainImageView,
+												 .imageLayout = VK_IMAGE_LAYOUT_GENERAL };
 
 	VkWriteDescriptorSet swapchainImageWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-										.dstSet = m_descriptorSets[frameData.frameIndex],
-										.dstBinding = 2,
-										.dstArrayElement = 0,
-										.descriptorCount = 1,
-										.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-										.pImageInfo = &swapchainImageInfo };
+												 .dstSet = m_descriptorSets[frameData.frameIndex],
+												 .dstBinding = 2,
+												 .dstArrayElement = 0,
+												 .descriptorCount = 1,
+												 .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+												 .pImageInfo = &swapchainImageInfo };
 
 	VkDescriptorBufferInfo colorBufferInfo = { .buffer = m_objectDataBuffer.buffer,
 											   .offset = m_objectDataStorage[frameData.frameIndex].offset,
@@ -860,11 +864,12 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 											  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 											  .pBufferInfo = &lightBufferInfo };
 
-	VkWriteDescriptorSet writes[] = { accelerationStructureWrite, accumulationImageWrite, swapchainImageWrite, colorBufferWrite, lightBufferWrite };
+	VkWriteDescriptorSet writes[] = { accelerationStructureWrite, accumulationImageWrite, swapchainImageWrite,
+									  colorBufferWrite, lightBufferWrite };
 
 	vkUpdateDescriptorSets(m_device.device(), 5, writes, 0, nullptr);
 
-	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(0));
+	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(0));
 
 	// Write updated data
 
@@ -925,7 +930,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 
 	vkCmdCopyBuffer(frameData.commandBuffer, m_stagingBuffer.buffer, m_objectDataBuffer.buffer, 2, dataCopyRegions);
 
-	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(1));
+	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(1));
 
 	VkBufferMemoryBarrier copyMemoryBarrier = { .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
 												.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -940,13 +945,13 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 1, &copyMemoryBarrier,
 						 0, nullptr);
 
-	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(2));
+	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(2));
 
 	// Build acceleration structures
 
 	VkAccelerationStructureGeometryKHR tlasGeometry;
 	VkAccelerationStructureBuildGeometryInfoKHR tlasAccelerationStructureBuildInfo =
-		constructTLASGeometryInfo(frameData.frameIndex, VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR, tlasGeometry);
+		constructTLASGeometryInfo(frameData.frameIndex, VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, tlasGeometry);
 
 	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = { .primitiveCount = static_cast<uint32_t>(
 																   spheres.size() + m_triangleObjectCount) };
@@ -955,7 +960,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdBuildAccelerationStructuresKHR(frameData.commandBuffer, 1, &tlasAccelerationStructureBuildInfo,
 										&ptrTLASRangeInfo);
 
-	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(3));
+	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(3));
 
 	VkImageSubresourceRange imageRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 										   .baseMipLevel = 0,
@@ -1028,7 +1033,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	vkCmdBindDescriptorSets(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_pipelineLayout, 0, 2,
 							sets, 0, nullptr);
 
-	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(4));
+	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(4));
 
 	VkStridedDeviceAddressRegionKHR nullRegion = {};
 
@@ -1050,7 +1055,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 						 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 0, nullptr, 1,
 						 &memoryBarrierAfter);
 
-	// vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(5));
+	vkCmdSetCheckpointNV(frameData.commandBuffer, reinterpret_cast<void*>(5));
 
 	return m_device.endFrame();
 }
@@ -1062,12 +1067,13 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructBL
 					   .geometry = { .aabbs = { VkAccelerationStructureGeometryAabbsDataKHR{
 										 .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
 										 .data = { .deviceAddress = m_aabbDataStorage.address },
-										 .stride = sizeof(VkAabbPositionsKHR) } } } };
+										 .stride = sizeof(VkAabbPositionsKHR) } } },
+					   .flags = VK_GEOMETRY_OPAQUE_BIT_KHR };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			 .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-			 .flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
-					  VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+			 .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+					  VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR,
 			 .mode = mode,
 			 .srcAccelerationStructure = mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR
 											 ? m_blasStructureData.structures[m_sphereBLASIndex].structure
@@ -1091,12 +1097,13 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructPl
 										 .vertexStride = sizeof(PerVertexData),
 										 .maxVertex = 3,
 										 .indexType = VK_INDEX_TYPE_UINT16,
-										 .indexData = { .deviceAddress = m_indexDataStorage.address } } } } };
+										 .indexData = { .deviceAddress = m_indexDataStorage.address } } } },
+					   .flags = VK_GEOMETRY_OPAQUE_BIT_KHR };
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			 .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-			 .flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
-					  VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+			 .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+					  VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR,
 			 .mode = mode,
 			 .srcAccelerationStructure = mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR
 											 ? m_blasStructureData.structures[m_planeBLASIndex].structure
@@ -1111,17 +1118,19 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructPl
 
 VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructTLASGeometryInfo(
 	uint32_t frameIndex, VkBuildAccelerationStructureModeKHR mode, VkAccelerationStructureGeometryKHR& targetGeometry) {
-	targetGeometry = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-					   .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
-					   .geometry = {
-						   .instances = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
-										  .arrayOfPointers = VK_FALSE,
-										  .data = { .deviceAddress = m_instanceDataStorage[frameIndex].address } } } };
+	targetGeometry = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+		.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
+		.geometry = { .instances = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
+									 .arrayOfPointers = VK_FALSE,
+									 .data = { .deviceAddress = m_instanceDataStorage[frameIndex].address } } },
+		.flags = VK_GEOMETRY_OPAQUE_BIT_KHR
+	};
 
 	return { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			 .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-			 .flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
-					  VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+			 .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+					  VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR,
 			 .mode = mode,
 			 .srcAccelerationStructure = mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR
 											 ? m_tlasStructureData[frameIndex].structures[0].structure
@@ -1285,6 +1294,4 @@ void HardwareSphereRaytracer::recreateAccumulationImage() {
 	verifyResult(vkCreateImageView(m_device.device(), &imageViewCreateInfo, nullptr, &m_accumulationImageView));
 }
 
-void HardwareSphereRaytracer::resetSampleCount() {
-	m_accumulatedSampleCount = 0; 
-}
+void HardwareSphereRaytracer::resetSampleCount() { m_accumulatedSampleCount = 0; }
