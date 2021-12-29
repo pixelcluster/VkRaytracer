@@ -252,6 +252,8 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 										   .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 	verifyResult(vkBeginCommandBuffer(blasBuildBuffer, &beginInfo));
 
+	vkCmdResetQueryPool(blasBuildBuffer, compactionSizeQueryPool, 0, static_cast<uint32_t>(buildInfos.size()));
+
 	VkBufferCopy bufferCopy = { .size = transformMatrices.size() * sizeof(VkTransformMatrixKHR) };
 	vkCmdCopyBuffer(blasBuildBuffer, triangleTransformStagingBuffer, triangleTransformBuffer, 1, &bufferCopy);
 
@@ -327,6 +329,8 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	uint32_t instanceIndex = 0;
 	for (auto& size : compactedASSizes) {
 		AccelerationStructureData data = createAccelerationStructure(size);
+		setObjectName(m_device.device(), VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, data.accelerationStructure,
+					  "Compacted BLAS " + std::to_string(instanceIndex));
 
 		m_triangleBLASes.push_back(data.accelerationStructure);
 		m_triangleASBackingBuffers.push_back(data.backingBuffer);
@@ -383,7 +387,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 
 	AccelerationStructureData tlasData =
 		createAccelerationStructure(tlasBuildInfo, { static_cast<uint32_t>(tlasInstances.size()) },
-									accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment);
+									accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment, true);
 
 	tlasBuildInfo.dstAccelerationStructure = tlasData.accelerationStructure;
 	tlasBuildInfo.scratchData = { .deviceAddress = tlasData.scratchBufferDeviceAddress };
@@ -406,6 +410,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 													.dst = m_triangleBLASes[compactedBLASIndex],
 													.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR };
 		vkCmdCopyAccelerationStructureKHR(tlasBuildBuffer, &copy);
+		++compactedBLASIndex;
 	}
 
 	if (lightSpheres.size() > 0) {
@@ -434,8 +439,6 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	m_dispatcher.submit(tlasBuildBuffer, {});
 	m_dispatcher.waitForFence(tlasBuildBuffer, UINT64_MAX);
 
-
-
 	vkDestroyBuffer(m_device.device(), triangleTransformBuffer, nullptr);
 	vkDestroyBuffer(m_device.device(), triangleTransformStagingBuffer, nullptr);
 
@@ -461,17 +464,18 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	vkDestroyBuffer(m_device.device(), instanceBuffer, nullptr);
 	vkDestroyBuffer(m_device.device(), instanceStagingBuffer, nullptr);
 	vkDestroyBuffer(m_device.device(), tlasData.scratchBuffer, nullptr);
+
+	if (lightSpheres.size() > 0)
+		vkDestroyBuffer(m_device.device(), m_lightDataStagingBuffer, nullptr);
 }
 
 AccelerationStructureBuilder::~AccelerationStructureBuilder() {
-	vkDestroyBuffer(m_device.device(), m_lightDataBuffer, nullptr);
-	vkDestroyBuffer(m_device.device(), m_lightDataStagingBuffer, nullptr);
-
 
 	vkDestroyAccelerationStructureKHR(m_device.device(), m_tlas, nullptr);
 	vkDestroyBuffer(m_device.device(), m_tlasBackingBuffer, nullptr);
 
 	if (m_sphereBLAS) {
+		vkDestroyBuffer(m_device.device(), m_lightDataBuffer, nullptr);
 		vkDestroyAccelerationStructureKHR(m_device.device(), m_sphereBLAS, nullptr);
 		vkDestroyBuffer(m_device.device(), m_sphereASBackingBuffer, nullptr);
 	}
@@ -545,7 +549,7 @@ size_t AccelerationStructureBuilder::bestAccelerationStructureIndex(std::vector<
 
 AccelerationStructureData AccelerationStructureBuilder::createAccelerationStructure(
 	const VkAccelerationStructureBuildGeometryInfoKHR& buildInfo, const std::vector<uint32_t>& maxPrimitiveCounts,
-	uint32_t scratchBufferAlignment) {
+	uint32_t scratchBufferAlignment, bool topLevel) {
 	AccelerationStructureData result = {};
 
 	VkAccelerationStructureBuildSizesInfoKHR sizeInfo = {
@@ -567,7 +571,8 @@ AccelerationStructureData AccelerationStructureBuilder::createAccelerationStruct
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
 		.buffer = result.backingBuffer,
 		.size = sizeInfo.accelerationStructureSize,
-		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR
+		.type =
+			topLevel ? VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR : VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR
 	};
 	verifyResult(vkCreateAccelerationStructureKHR(m_device.device(), &accelerationStructureCreateInfo, nullptr,
 												  &result.accelerationStructure));

@@ -34,7 +34,7 @@ class AccelerationStructureBuilder {
 	AccelerationStructureData createAccelerationStructure(
 		const VkAccelerationStructureBuildGeometryInfoKHR& buildInfos,
 														  const std::vector<uint32_t>& maxPrimitiveCounts,
-														  uint32_t scratchBufferAlignment);
+														  uint32_t scratchBufferAlignment, bool topLevel = false);
 	AccelerationStructureData createAccelerationStructure(uint32_t compactedSize);
 
 	RayTracingDevice& m_device;
