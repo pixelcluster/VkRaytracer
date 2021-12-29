@@ -5,7 +5,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 const float eta_i = 1.0f;
-const float eta_t = 1.81;
+const float eta_t = 1.89f;
 const float alpha = 0.6f;
 
 #define USE_FRESNEL
@@ -94,12 +94,9 @@ void main() {
 
 		payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 
-		if(payload.recursionDepth == 1)
-			debugPrintfEXT("beta=%f\n", payload.rayThroughput);
-
 		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
-		//incomingRadiance += payload.color.rgb * max(payload.color.a, 0.0f);
+		incomingRadiance += payload.color.rgb * max(payload.color.a, 0.0f);
 	}
 	//incomingRadiance = sampleDir;
 	payload.color = vec4(incomingRadiance * instanceColor, 1.0f);

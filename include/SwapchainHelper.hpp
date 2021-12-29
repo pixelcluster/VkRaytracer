@@ -49,7 +49,7 @@ VkSwapchainKHR createSwapchain(VkPhysicalDevice physicalDevice, VkDevice device,
 	verifyResult(vkCreateSwapchainKHR(device, &swapchainCreateInfo, nullptr, &swapchain));
 
 	if (nameSwapchain)
-		setObjectName(device, VK_OBJECT_TYPE_SWAPCHAIN_KHR, reinterpret_cast<uint64_t>(swapchain),
+		setObjectName(device, VK_OBJECT_TYPE_SWAPCHAIN_KHR, swapchain,
 					  "Main presentation swapchain");
 
 	if (oldSwapchain) {

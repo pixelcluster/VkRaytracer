@@ -2,10 +2,7 @@
 
 #include <Window.hpp>
 #include <vector>
-
-static constexpr bool enableDebugUtils = true;
-static constexpr bool enableValidation = false;
-static constexpr uint32_t frameInFlightCount = 3;
+#include <Config.hpp>
 
 // Data provided to render one frame.
 struct FrameData {

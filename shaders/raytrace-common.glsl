@@ -10,6 +10,32 @@ struct RayPayload {
 	uint randomState;
 };
 
+struct GeometryData {
+	uint vertexOffset;
+	uint uvOffset;
+	uint normalOffset;
+	uint tangentOffset;
+	uint indexOffset;
+
+	uint materialIndex;
+};
+
+struct Material {
+	float alphaCutoff;
+
+	vec4 albedoScale;
+
+	float roughnessFactor;
+	float metallicFactor;
+
+	float ior;
+
+	vec4 emissiveFactor;
+
+	uint albedoAndMetallicRoughnessTextureIndex;
+	uint normalAndEmissiveTextureIndex;
+};
+
 #ifdef USE_WEIGHTING
 #include "sphere-light.glsl"
 #include "microfacet-light.glsl"

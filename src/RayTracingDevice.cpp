@@ -164,13 +164,17 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		.pNext = &rayTracingFeatures,
 		.accelerationStructure = VK_TRUE
 	};
-	VkPhysicalDeviceBufferDeviceAddressFeatures deviceAddressFeatures = {
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+	VkPhysicalDeviceVulkan12Features vulkan12Features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
 		.pNext = &accelerationStructureFeatures,
+		.descriptorIndexing = VK_TRUE,
+		.shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+		.scalarBlockLayout = VK_TRUE,
 		.bufferDeviceAddress = VK_TRUE
 	};
+
 	VkPhysicalDeviceFeatures2 features = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-										   .pNext = enableHardwareRaytracing ? &deviceAddressFeatures : nullptr };
+										   .pNext = enableHardwareRaytracing ? &vulkan12Features : nullptr };
 
 	std::vector<const char*> deviceExtensionNames;
 	if (enableHardwareRaytracing) {
@@ -211,12 +215,12 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 	vkGetDeviceQueue(m_device, m_queueFamilyIndex, 0, &m_queue);
 
 	if constexpr (enableDebugUtils) {
-		setObjectName(m_device, VK_OBJECT_TYPE_DEVICE, reinterpret_cast<uint64_t>(m_device), "Main device");
-		setObjectName(m_device, VK_OBJECT_TYPE_SURFACE_KHR, reinterpret_cast<uint64_t>(m_surface),
+		setObjectName(m_device, VK_OBJECT_TYPE_DEVICE, m_device, "Main device");
+		setObjectName(m_device, VK_OBJECT_TYPE_SURFACE_KHR, m_surface,
 					  "Presentation surface");
-		setObjectName(m_device, VK_OBJECT_TYPE_PHYSICAL_DEVICE, reinterpret_cast<uint64_t>(m_physicalDevice),
+		setObjectName(m_device, VK_OBJECT_TYPE_PHYSICAL_DEVICE, m_physicalDevice,
 					  "Chosen physical device");
-		setObjectName(m_device, VK_OBJECT_TYPE_QUEUE, reinterpret_cast<uint64_t>(m_queue),
+		setObjectName(m_device, VK_OBJECT_TYPE_QUEUE, m_queue,
 					  "Main ray-tracing/compute queue");
 	}
 
@@ -291,15 +295,15 @@ void RayTracingDevice::createPerFrameData(size_t index) {
 	if constexpr (enableDebugUtils) {
 		std::string indexString = std::to_string(index);
 
-		setObjectName(m_device, VK_OBJECT_TYPE_COMMAND_POOL, reinterpret_cast<uint64_t>(pool),
+		setObjectName(m_device, VK_OBJECT_TYPE_COMMAND_POOL, pool,
 					  "Command pool for frame " + indexString + " in flight");
-		setObjectName(m_device, VK_OBJECT_TYPE_COMMAND_BUFFER, reinterpret_cast<uint64_t>(commandBuffer),
+		setObjectName(m_device, VK_OBJECT_TYPE_COMMAND_BUFFER, commandBuffer,
 					  "Command buffer for frame " + indexString + " in flight");
-		setObjectName(m_device, VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<uint64_t>(acquireDoneSemaphore),
+		setObjectName(m_device, VK_OBJECT_TYPE_SEMAPHORE, acquireDoneSemaphore,
 					  "Image acquire wait semaphore for frame " + indexString + " in flight");
-		setObjectName(m_device, VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<uint64_t>(presentReadySemaphore),
+		setObjectName(m_device, VK_OBJECT_TYPE_SEMAPHORE, presentReadySemaphore,
 					  "Present signal semaphore for frame " + indexString + " in flight");
-		setObjectName(m_device, VK_OBJECT_TYPE_FENCE, reinterpret_cast<uint64_t>(fence),
+		setObjectName(m_device, VK_OBJECT_TYPE_FENCE, fence,
 					  "Fence for frame " + indexString + " in flight");
 	}
 	m_perFrameData[index] = data;
@@ -338,9 +342,9 @@ void RayTracingDevice::createSwapchainResources() {
 		verifyResult(vkCreateImageView(m_device, &createInfo, nullptr, &view));
 
 		if constexpr (enableDebugUtils) {
-			setObjectName(m_device, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image),
+			setObjectName(m_device, VK_OBJECT_TYPE_IMAGE, image,
 						  std::string("Swapchain image") + std::to_string(imageIndexCounter++).c_str());
-			setObjectName(m_device, VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<uint64_t>(view),
+			setObjectName(m_device, VK_OBJECT_TYPE_IMAGE_VIEW, view,
 						  std::string("Swapchain image view") + std::to_string(imageIndexCounter++).c_str());
 		}
 		m_swapchainViews.push_back(view);

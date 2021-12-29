@@ -5,10 +5,11 @@
 #include <RayTracingDevice.hpp>
 
 struct Sphere {
-	float position[4];
-	float radius;
-	float color[4];
-};
+float position[4];
+float radius;
+float color[4]; // r, g, b, a = intensity scale
+}
+;
 
 struct TriangleObject {
 	size_t vertexCount;
@@ -24,6 +25,7 @@ class HardwareSphereRaytracer {
 	// RayTracingDevice already deletes/defaults copy/move constructors
 
 	bool update(const std::vector<Sphere>& spheres);
+	RayTracingDevice& device() { return m_device; }
 
   private:
 	VkAccelerationStructureBuildGeometryInfoKHR constructBLASGeometryInfo(
@@ -145,7 +147,7 @@ class HardwareSphereRaytracer {
 	VkCommandPool m_oneTimeSubmitPool;
 	VkFence m_oneTimeSubmitFence;
 
-	float m_worldPos[3] = { 2.7f, 5.8f, -1.2f };
+	float m_worldPos[3] = { 0.0f, 2.0f, -5.0f };
 	double m_lastTime = 0.0f;
 	uint32_t m_accumulatedSampleCount = 0;
 	uint32_t m_maxSamples = 1024;

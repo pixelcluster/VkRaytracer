@@ -56,5 +56,8 @@ bool OneTimeDispatcher::waitForFence(VkCommandBuffer commandBuffer, uint64_t tim
 	VkResult fenceStatus = vkWaitForFences(m_device.device(), 1, &submittedArrayIterator->fence, VK_TRUE, timeout);
 	verifyResult(fenceStatus);
 
+	vkDestroyFence(m_device.device(), submittedArrayIterator->fence, nullptr);
+	m_submittedCommandBuffers.erase(submittedArrayIterator);
+
 	return fenceStatus == VK_SUCCESS;
 }

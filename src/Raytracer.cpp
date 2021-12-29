@@ -212,7 +212,7 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 											  .stride = sizeof(VkAabbPositionsKHR) } } },
 							.flags = VK_GEOMETRY_OPAQUE_BIT_KHR } },
 		  .maxPrimitiveCount = 1,
-		  .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR},
+		  .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR },
 		{ .geometries = { { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
 							.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
 							.geometry = { .triangles = { VkAccelerationStructureGeometryTrianglesDataKHR{
@@ -287,10 +287,8 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	verifyResult(vkMapMemory(m_device.device(), m_stagingBuffer.dedicatedMemory, 0, stagingBufferInfo.size, 0,
 							 &m_mappedStagingBuffer));
 
-	if (enableDebugUtils) {
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY,
-					  reinterpret_cast<uint64_t>(m_stagingBuffer.dedicatedMemory), "Staging buffer memory");
-	}
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY, m_stagingBuffer.dedicatedMemory,
+				  "Staging buffer memory");
 
 	BufferInfo accelerationStructureDataInfo = {
 		.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
@@ -354,18 +352,14 @@ HardwareSphereRaytracer::HardwareSphereRaytracer(size_t windowWidth, size_t wind
 	m_objectDataBuffer = deviceBatch.buffers[1];
 	m_shaderBindingTableBuffer = deviceBatch.buffers[2];
 
-	if (enableDebugUtils) {
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(m_stagingBuffer.buffer),
-					  "Sphere/Acceleration structure data staging buffer");
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_stagingBuffer.buffer,
+				  "Sphere/Acceleration structure data staging buffer");
 
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER,
-					  reinterpret_cast<uint64_t>(m_accelerationStructureDataBuffer.buffer),
-					  "Acceleration structure buffer");
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(m_objectDataBuffer.buffer),
-					  "Object data buffer");
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER,
-					  reinterpret_cast<uint64_t>(m_shaderBindingTableBuffer.buffer), "Shader binding table buffer");
-	}
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_accelerationStructureDataBuffer.buffer,
+				  "Acceleration structure buffer");
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_objectDataBuffer.buffer, "Object data buffer");
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_shaderBindingTableBuffer.buffer,
+				  "Shader binding table buffer");
 
 	VkBufferDeviceAddressInfo deviceAddressInfo;
 	deviceAddressInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -1022,7 +1016,7 @@ bool HardwareSphereRaytracer::update(const std::vector<Sphere>& spheres) {
 	PushConstantData data = { .worldOffset = { m_worldPos[0], -m_worldPos[1], m_worldPos[2] },
 							  .aspectRatio = static_cast<float>(m_device.window().width()) /
 											 static_cast<float>(m_device.window().height()),
-							  .tanHalfFov = tanf((75.0f / 180.0f) * std::numbers::pi / 2.0f),
+							  .tanHalfFov = tanf((45.0f / 180.0f) * std::numbers::pi / 2.0f),
 							  .time = static_cast<float>(glfwGetTime()),
 							  .accumulatedSampleCount = m_accumulatedSampleCount };
 	vkCmdPushConstants(frameData.commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0,
@@ -1145,62 +1139,54 @@ VkAccelerationStructureBuildGeometryInfoKHR HardwareSphereRaytracer::constructTL
 
 void HardwareSphereRaytracer::setGeometryBLASBatchNames() {
 	if (m_blasStructureData.sharedStructureMemory) {
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY,
-					  reinterpret_cast<uint64_t>(m_blasStructureData.sharedStructureMemory),
+		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY, m_blasStructureData.sharedStructureMemory,
 					  "BLAS/scratch buffer memory");
 	}
 	if (m_blasStructureData.scratchBuffer.dedicatedMemory) {
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY,
-					  reinterpret_cast<uint64_t>(m_blasStructureData.sharedStructureMemory),
+		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY, m_blasStructureData.sharedStructureMemory,
 					  "Dedicated TLAS scratch buffer memory");
 	}
 	if (m_blasStructureData.structureBuffer.dedicatedMemory) {
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY,
-					  reinterpret_cast<uint64_t>(m_blasStructureData.sharedStructureMemory),
+		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY, m_blasStructureData.sharedStructureMemory,
 					  "Dedicated BLAS buffer memory");
 	}
 
-	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER,
-				  reinterpret_cast<uint64_t>(m_blasStructureData.scratchBuffer.buffer),
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_blasStructureData.scratchBuffer.buffer,
 				  "BLAS scratch buffer for frame in flight ");
 
-	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER,
-				  reinterpret_cast<uint64_t>(m_blasStructureData.structureBuffer.buffer),
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_blasStructureData.structureBuffer.buffer,
 				  "BLAS buffer for frame in flight ");
 
 	setObjectName(m_device.device(), VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR,
-				  reinterpret_cast<uint64_t>(m_blasStructureData.structures[m_sphereBLASIndex].structure),
-				  "Sphere BLAS");
+				  m_blasStructureData.structures[m_sphereBLASIndex].structure, "Sphere BLAS");
 }
 
 void HardwareSphereRaytracer::setGeometryTLASBatchNames(size_t frameIndex) {
 	std::string frameInFlightIndexString = std::to_string(frameIndex);
 	if (m_tlasStructureData[frameIndex].sharedStructureMemory) {
 		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY,
-					  reinterpret_cast<uint64_t>(m_tlasStructureData[frameIndex].sharedStructureMemory),
+					  m_tlasStructureData[frameIndex].sharedStructureMemory,
 					  "TLAS/scratch buffer memory for frame in flight " + frameInFlightIndexString);
 	}
 	if (m_tlasStructureData[frameIndex].scratchBuffer.dedicatedMemory) {
 		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY,
-					  reinterpret_cast<uint64_t>(m_tlasStructureData[frameIndex].sharedStructureMemory),
+					  m_tlasStructureData[frameIndex].sharedStructureMemory,
 					  "Dedicated TLAS scratch buffer memory for frame in flight " + frameInFlightIndexString);
 	}
 	if (m_tlasStructureData[frameIndex].structureBuffer.dedicatedMemory) {
 		setObjectName(m_device.device(), VK_OBJECT_TYPE_DEVICE_MEMORY,
-					  reinterpret_cast<uint64_t>(m_tlasStructureData[frameIndex].sharedStructureMemory),
+					  m_tlasStructureData[frameIndex].sharedStructureMemory,
 					  "Dedicated TLAS buffer memory for frame in flight " + frameInFlightIndexString);
 	}
 
-	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER,
-				  reinterpret_cast<uint64_t>(m_tlasStructureData[frameIndex].scratchBuffer.buffer),
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_tlasStructureData[frameIndex].scratchBuffer.buffer,
 				  "TLAS Scratch buffer for frame in flight " + frameInFlightIndexString);
 
-	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER,
-				  reinterpret_cast<uint64_t>(m_tlasStructureData[frameIndex].structureBuffer.buffer),
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_tlasStructureData[frameIndex].structureBuffer.buffer,
 				  "TLAS buffer for frame in flight " + frameInFlightIndexString);
 
 	setObjectName(m_device.device(), VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR,
-				  reinterpret_cast<uint64_t>(m_tlasStructureData[frameIndex].structures[0].structure),
+				  m_tlasStructureData[frameIndex].structures[0].structure,
 				  "TLAS for frame in flight " + frameInFlightIndexString);
 }
 

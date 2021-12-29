@@ -1,12 +1,9 @@
+#include <ErrorHelper.hpp>
+#include <numeric>
 #include <util/MemoryAllocator.hpp>
 #include <volk.h>
-#include <ErrorHelper.hpp>
 
-MemoryAllocator::MemoryAllocator(RayTracingDevice& device) : m_device(device) {
-	m_stagingMemoryTypeIndex =
-		device.findBestMemoryIndex(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0, 0);
-	m_deviceMemoryTypeIndex = device.findBestMemoryIndex(0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
-}
+MemoryAllocator::MemoryAllocator(RayTracingDevice& device) : m_device(device) {}
 
 MemoryAllocator::~MemoryAllocator() {
 	for (auto& memory : m_stagingBufferMemoryAllocations) {
@@ -20,20 +17,59 @@ MemoryAllocator::~MemoryAllocator() {
 	}
 }
 
-void MemoryAllocator::bindStagingBuffer(VkBuffer buffer, VkDeviceSize size, VkDeviceSize alignment) {
-	bindResource(m_stagingBufferMemoryAllocations, buffer, vkBindBufferMemory, size, alignment,
-				 m_stagingMemoryTypeIndex, nullptr);
+void* MemoryAllocator::bindStagingBuffer(VkBuffer buffer, VkDeviceSize alignment) {
+	VkMemoryRequirements requirements;
+	vkGetBufferMemoryRequirements(m_device.device(), buffer, &requirements);
+
+	uint32_t memoryTypeIndex = m_device.findBestMemoryIndex(
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0, ~requirements.memoryTypeBits);
+	VkDeviceSize allocationAlignment;
+	if (alignment) {
+		allocationAlignment = std::lcm(alignment, requirements.alignment);
+	} else {
+		allocationAlignment = requirements.alignment;
+	}
+
+	return bindResource(m_stagingBufferMemoryAllocations, buffer, vkBindBufferMemory, requirements.size,
+									  allocationAlignment, memoryTypeIndex, nullptr, bufferMemorySize, true);
 }
 
-void MemoryAllocator::bindDeviceBuffer(VkBuffer buffer, VkDeviceSize size, VkDeviceSize alignment) {
+void MemoryAllocator::bindDeviceBuffer(VkBuffer buffer, VkDeviceSize alignment) {
 	VkMemoryAllocateFlagsInfo flagsInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
 											.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT };
-	bindResource(m_deviceBufferMemoryAllocations, buffer, vkBindBufferMemory, size, alignment, m_deviceMemoryTypeIndex,
-			   &flagsInfo);
+
+	VkMemoryRequirements requirements;
+	vkGetBufferMemoryRequirements(m_device.device(), buffer, &requirements);
+
+	uint32_t memoryTypeIndex =
+		m_device.findBestMemoryIndex(0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, ~requirements.memoryTypeBits);
+	VkDeviceSize allocationAlignment;
+	if (alignment) {
+		if (requirements.alignment % alignment == 0 || alignment % requirements.alignment == 0) {
+			allocationAlignment = std::max(requirements.alignment, alignment);
+		} else
+			allocationAlignment = std::lcm(alignment, requirements.alignment);
+	} else {
+		allocationAlignment = requirements.alignment;
+	}
+
+	bindResource(m_deviceBufferMemoryAllocations, buffer, vkBindBufferMemory, requirements.size, allocationAlignment,
+				 memoryTypeIndex, &flagsInfo, bufferMemorySize);
 }
 
-void MemoryAllocator::bindDeviceImage(VkImage image, VkDeviceSize byteSize, VkDeviceSize alignment) {
-	bindResource(m_deviceImageMemoryAllocations, image, vkBindImageMemory, byteSize, alignment,
-				 m_deviceMemoryTypeIndex,
-				 nullptr);
+void MemoryAllocator::bindDeviceImage(VkImage image, VkDeviceSize alignment) {
+	VkMemoryRequirements requirements;
+	vkGetImageMemoryRequirements(m_device.device(), image, &requirements);
+
+	uint32_t memoryTypeIndex =
+		m_device.findBestMemoryIndex(0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, ~requirements.memoryTypeBits);
+
+	VkDeviceSize allocationAlignment;
+	if (alignment) {
+		allocationAlignment = std::lcm(alignment, requirements.alignment);
+	} else {
+		allocationAlignment = requirements.alignment;
+	}
+	bindResource(m_deviceImageMemoryAllocations, image, vkBindImageMemory, requirements.size, alignment,
+				 memoryTypeIndex, nullptr, imageMemorySize);
 }

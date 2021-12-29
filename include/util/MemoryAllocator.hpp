@@ -6,6 +6,8 @@
 #include <ErrorHelper.hpp>
 
 struct DeviceMemoryAllocation {
+	void* mappedPointer = nullptr;
+
 	VkDeviceMemory memory;
 	VkDeviceSize freeSize;
 	VkDeviceSize memoryOffset;
@@ -20,18 +22,19 @@ class MemoryAllocator {
 	//all buffers/images allocated should be destroyed before calling destructor
 	~MemoryAllocator();
 
-	void bindStagingBuffer(VkBuffer buffer, VkDeviceSize size, VkDeviceSize alignment);
-	void bindDeviceBuffer(VkBuffer buffer, VkDeviceSize size, VkDeviceSize alignment);
+	//returns mapped buffer pointer
+	void* bindStagingBuffer(VkBuffer buffer, VkDeviceSize alignment);
+	void bindDeviceBuffer(VkBuffer buffer, VkDeviceSize alignment);
 
-	void bindDeviceImage(VkImage image, VkDeviceSize byteSize, VkDeviceSize alignment);
+	void bindDeviceImage(VkImage image, VkDeviceSize alignment);
 
   private:
-	//generic function performing allocations and binding resources
+	//generic function performing allocations and binding resources, returns mapped memory pointer (potentially invalid if memory was unmapped)
 	template<typename ResourceType>
-	void bindResource(std::vector<DeviceMemoryAllocation>& allocations, ResourceType resource,
+	void* bindResource(std::vector<DeviceMemoryAllocation>& allocations, ResourceType resource,
 					VkResult (*bindCommand)(VkDevice, ResourceType, VkDeviceMemory, VkDeviceSize),
 					VkDeviceSize size,
-					VkDeviceSize alignment, uint32_t memoryTypeIndex, const void* memoryAllocatePNext);
+					VkDeviceSize alignment, uint32_t memoryTypeIndex, const void* memoryAllocatePNext, VkDeviceSize memoryAllocateSize, bool mapMemory = false);
 
 	std::vector<DeviceMemoryAllocation> m_stagingBufferMemoryAllocations;
 	std::vector<DeviceMemoryAllocation> m_deviceBufferMemoryAllocations;
@@ -39,51 +42,58 @@ class MemoryAllocator {
 	std::vector<DeviceMemoryAllocation> m_deviceImageMemoryAllocations;
 
 	RayTracingDevice& m_device;
-
-	uint32_t m_stagingMemoryTypeIndex;
-	uint32_t m_deviceMemoryTypeIndex;
 };
 
 template <typename ResourceType>
-void MemoryAllocator::bindResource(std::vector<DeviceMemoryAllocation>& allocations, ResourceType resource,
+void* MemoryAllocator::bindResource(std::vector<DeviceMemoryAllocation>& allocations, ResourceType resource,
 											   VkResult (*bindCommand)(VkDevice, ResourceType, VkDeviceMemory,
 																	   VkDeviceSize),
 											   VkDeviceSize size, VkDeviceSize alignment, uint32_t memoryTypeIndex,
-											   const void* memoryAllocatePNext) {
+									const void* memoryAllocatePNext, VkDeviceSize memoryAllocateSize, bool mapMemory) {
 	// Linear bump allocation for now, don't need freeing
 
 	VkMemoryAllocateInfo allocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 										  .pNext = memoryAllocatePNext,
-										  .allocationSize = std::min(bufferMemorySize, size),
+										  .allocationSize = std::max(memoryAllocateSize, size),
 										  .memoryTypeIndex = memoryTypeIndex };
 	DeviceMemoryAllocation memoryAllocation = { .freeSize = allocateInfo.allocationSize };
 
 	if (allocations.empty()) {
 		verifyResult(vkAllocateMemory(m_device.device(), &allocateInfo, nullptr, &memoryAllocation.memory));
+		if (mapMemory) {
+			verifyResult(vkMapMemory(m_device.device(), memoryAllocation.memory, 0, memoryAllocation.freeSize, 0,
+									 &memoryAllocation.mappedPointer));
+		}
 		allocations.push_back(memoryAllocation);
 	}
 
 	for (size_t i = allocations.size() - 1; i < allocations.size(); --i) {
-		size_t alignedSize = size;
+		size_t alignOffset = 0;
 		if (alignment) {
 			size_t alignmentRemainder = allocations[i].memoryOffset % alignment;
 			if (alignmentRemainder) {
-				alignedSize += alignment - alignmentRemainder;
+				alignOffset += alignment - alignmentRemainder;
 			}
 		}
 
-		if (allocations[i].freeSize >= alignedSize) {
+		if (allocations[i].freeSize >= size + alignOffset) {
 			verifyResult(
-				bindCommand(m_device.device(), resource, allocations[i].memory, allocations[i].memoryOffset));
-			allocations[i].freeSize -= alignedSize;
-			allocations[i].memoryOffset += alignedSize;
-			return;
+				bindCommand(m_device.device(), resource, allocations[i].memory, allocations[i].memoryOffset + alignOffset));
+			allocations[i].freeSize -= size + alignOffset;
+			allocations[i].memoryOffset += size + alignOffset;
+			return reinterpret_cast<uint8_t*>(allocations[i].mappedPointer) + allocations[i].memoryOffset - (size + alignOffset);
 		}
 	}
 
 	verifyResult(vkAllocateMemory(m_device.device(), &allocateInfo, nullptr, &memoryAllocation.memory));
+	if (mapMemory) {
+		verifyResult(vkMapMemory(m_device.device(), memoryAllocation.memory, 0, memoryAllocation.freeSize, 0,
+								 &memoryAllocation.mappedPointer));
+	}
 	verifyResult(bindCommand(m_device.device(), resource, memoryAllocation.memory, memoryAllocation.memoryOffset));
 	memoryAllocation.freeSize -= size;
 	memoryAllocation.memoryOffset += size;
 	allocations.push_back(memoryAllocation);
+
+	return allocations.back().mappedPointer;
 }

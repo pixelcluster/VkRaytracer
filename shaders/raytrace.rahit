@@ -1,0 +1,65 @@
+#version 460 core
+
+#extension GL_EXT_ray_tracing : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_debug_printf : enable
+#extension GL_GOOGLE_include_directive : require
+
+#include "raytrace-common.glsl"
+
+
+layout(set = 2, binding = 0) restrict buffer PerGeometryData {
+	GeometryData geometryData[];
+};
+
+layout(set = 2, binding = 1) restrict buffer MaterialData {
+	Material materials[];
+};
+
+layout(std430, set = 2, binding = 2) buffer IndexBuffer {
+	uint indices[];
+};
+
+layout(scalar, set = 2, binding = 3) buffer NormalBuffer { 
+	vec3 normals[];
+};
+
+layout(std430, set = 2, binding = 4) buffer TangentBuffer {
+	vec4 tangents[];
+};
+
+layout(std430, set = 2, binding = 5) buffer TexcoordBuffer {
+	vec2 texcoords[];
+};
+
+layout(set = 3, binding = 0) uniform sampler2D textures[];
+
+hitAttributeEXT vec2 baryCoord;
+
+void main() {
+	GeometryData data = geometryData[gl_InstanceCustomIndexEXT + gl_GeometryIndexEXT];
+	uint primitiveIndices[3] = uint[3](
+		indices[data.indexOffset + gl_PrimitiveID * 3],
+		indices[data.indexOffset + gl_PrimitiveID * 3 + 1],
+		indices[data.indexOffset + gl_PrimitiveID * 3 + 2]
+	);
+
+	vec2 texCoords[3] = vec2[3](
+		texcoords[data.uvOffset + primitiveIndices[0]],
+		texcoords[data.uvOffset + primitiveIndices[1]],
+		texcoords[data.uvOffset + primitiveIndices[2]]
+	);
+
+	vec3 baryCoords = vec3(1.0f - baryCoord.x - baryCoord.y, baryCoord.x, baryCoord.y);
+	vec2 interpolatedTexCoords = baryCoords.x * texCoords[0] + baryCoords.y * texCoords[1] + baryCoords.z * texCoords[2];
+
+	Material material = materials[data.materialIndex];
+
+	uint albedoTexIndex = material.albedoAndMetallicRoughnessTextureIndex >> 16;
+
+	if(texture(textures[nonuniformEXT(albedoTexIndex)], interpolatedTexCoords).a < material.alphaCutoff)
+		ignoreIntersectionEXT;
+	else
+		terminateRayEXT;
+}

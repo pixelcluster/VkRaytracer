@@ -5,7 +5,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 const float eta_i = 1.0f;
-const float eta_t = 1.89;
+const float eta_t = 1.89f;
 const float alpha = 0.1;
 
 #define USE_FRESNEL

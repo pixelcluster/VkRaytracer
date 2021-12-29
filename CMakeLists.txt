@@ -27,7 +27,7 @@ find_package(Vulkan REQUIRED FATAL_ERROR)
 
 add_executable(VkRaytracer ${CPP_SOURCES} ${HEADERS})
 
-target_include_directories(VkRaytracer PUBLIC "include" Vulkan_INCLUDE_DIRS)
+target_include_directories(VkRaytracer PUBLIC "include" "dependencies/cgltf" "dependencies/stb-image" Vulkan_INCLUDE_DIRS)
 
 target_link_libraries(VkRaytracer glfw volk::volk)
 

@@ -24,5 +24,6 @@ inline VkShaderModule createShaderModule(VkDevice device, const std::string& fil
 														.pCode = code };
 
 	verifyResult(vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule));
+	delete[] code;
 	return shaderModule;
 }
