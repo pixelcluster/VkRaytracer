@@ -31,7 +31,7 @@ void* MemoryAllocator::bindStagingBuffer(VkBuffer buffer, VkDeviceSize alignment
 	}
 
 	return bindResource(m_stagingBufferMemoryAllocations, buffer, vkBindBufferMemory, requirements.size,
-									  allocationAlignment, memoryTypeIndex, nullptr, bufferMemorySize, true);
+						allocationAlignment, memoryTypeIndex, nullptr, bufferMemorySize, true).mappedMemoryPointer;
 }
 
 void MemoryAllocator::bindDeviceBuffer(VkBuffer buffer, VkDeviceSize alignment) {
@@ -57,7 +57,7 @@ void MemoryAllocator::bindDeviceBuffer(VkBuffer buffer, VkDeviceSize alignment) 
 				 memoryTypeIndex, &flagsInfo, bufferMemorySize);
 }
 
-void MemoryAllocator::bindDeviceImage(VkImage image, VkDeviceSize alignment) {
+ImageAllocation MemoryAllocator::bindDeviceImage(VkImage image, VkDeviceSize alignment) {
 	VkMemoryRequirements requirements;
 	vkGetImageMemoryRequirements(m_device.device(), image, &requirements);
 
@@ -70,6 +70,19 @@ void MemoryAllocator::bindDeviceImage(VkImage image, VkDeviceSize alignment) {
 	} else {
 		allocationAlignment = requirements.alignment;
 	}
-	bindResource(m_deviceImageMemoryAllocations, image, vkBindImageMemory, requirements.size, alignment,
-				 memoryTypeIndex, nullptr, imageMemorySize);
+	BindResult result = bindResource(m_deviceImageMemoryAllocations, image, vkBindImageMemory, requirements.size,
+									 allocationAlignment, memoryTypeIndex, nullptr, imageMemorySize);
+	return { .memoryAllocationIndex = result.memoryIndex,
+			 .offset = result.offset,
+			 .size = requirements.size + result.alignmentPadding };
+}
+
+void MemoryAllocator::freeImage(const ImageAllocation& allocation) {
+	if (allocation.memoryAllocationIndex >= m_deviceImageMemoryAllocations.size())
+		return;
+	if (m_deviceImageMemoryAllocations[allocation.memoryAllocationIndex].memoryOffset ==
+		allocation.offset + allocation.size) {
+		m_deviceImageMemoryAllocations[allocation.memoryAllocationIndex].memoryOffset -=
+			allocation.offset + allocation.size;
+	}
 }

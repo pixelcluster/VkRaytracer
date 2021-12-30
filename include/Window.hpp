@@ -30,10 +30,18 @@ class Window {
 
 	bool keyPressed(int keyCode) const { return glfwGetKey(m_window, keyCode); }
 
+	float mouseMoveX() const { return m_mouseMoveX; }
+	float mouseMoveY() const { return m_mouseMoveY; }
+
   private:
+
+	float m_mouseMoveX = 0.0f, m_mouseMoveY = 0.0f;
 
 	size_t m_width, m_height;
 	bool m_windowSizeDirty = false;
+
+	bool m_lastMouseValid = false;
+	double m_lastMouseX, m_lastMouseY;
 
 	GLFWwindow* m_window;
 };

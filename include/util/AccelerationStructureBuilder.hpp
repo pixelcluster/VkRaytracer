@@ -25,6 +25,10 @@ class AccelerationStructureBuilder {
 	~AccelerationStructureBuilder();
 
 	VkBuffer lightDataBuffer() const { return m_lightDataBuffer; }
+	VkDeviceSize lightDataBufferSize() const { return m_lightDataBufferSize; }
+
+	VkBuffer geometryIndexBuffer() const { return m_geometryIndexBuffer; }
+	VkDeviceSize geometryIndexBufferSize() const { return m_geometryIndexBufferSize; }
 
 	VkAccelerationStructureKHR tlas() const { return m_tlas; }
 
@@ -42,7 +46,10 @@ class AccelerationStructureBuilder {
 	OneTimeDispatcher& m_dispatcher;
 
 	VkBuffer m_lightDataBuffer;
-	VkBuffer m_lightDataStagingBuffer;
+	VkDeviceSize m_lightDataBufferSize = 0;
+
+	VkBuffer m_geometryIndexBuffer;
+	VkDeviceSize m_geometryIndexBufferSize;
 
 	VkAccelerationStructureKHR m_tlas;
 	VkBuffer m_tlasBackingBuffer;

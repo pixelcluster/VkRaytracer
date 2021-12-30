@@ -46,6 +46,23 @@ void Window::pollEvents() {
 		m_height = newHeightU;
 		m_windowSizeDirty = true;
 	}
+
+	if (glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_1)) {
+		double mousePosX, mousePosY;
+		glfwGetCursorPos(m_window, &mousePosX, &mousePosY);
+		if (m_lastMouseValid) {
+			m_mouseMoveX = (mousePosX - m_lastMouseX);
+			m_mouseMoveY = (mousePosY - m_lastMouseY);
+		}
+
+		m_lastMouseX = mousePosX;
+		m_lastMouseY = mousePosY;
+		m_lastMouseValid = true;
+	} else {
+		m_lastMouseValid = false;
+		m_mouseMoveX = 0.0f;
+		m_mouseMoveY = 0.0f;
+	}
 }
 
 void Window::waitEvents() {

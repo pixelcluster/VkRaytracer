@@ -27,6 +27,7 @@ struct Material {
 
 	float roughnessFactor;
 	float metallicFactor;
+	float normalMapFactor;
 
 	float ior;
 
@@ -36,6 +37,11 @@ struct Material {
 	uint normalAndEmissiveTextureIndex;
 };
 
+struct LightData {
+	vec4 position;
+	vec4 color;
+};
+
 #ifdef USE_WEIGHTING
 #include "sphere-light.glsl"
 #include "microfacet-light.glsl"
@@ -43,7 +49,6 @@ struct Material {
 vec3 weightLight(LightData lightData, vec3 hitPoint, vec3 sampleDir, vec3 objectHitNormal, vec4 radiance) {
 	float bsdfFactor = microfacetBSDF(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
 	float bsdfPdf = pdfMicrofacet(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
-	
 	float lightPdf = pdfSphere(hitPoint, sampleDir, lightData);
 	
 	radiance.a = max(1.0f - max(radiance.a, 0.0f), 0.0f);

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <RayTracingDevice.hpp>
-#include <volk.h>
-#include <util/MemoryLiterals.hpp>
 #include <ErrorHelper.hpp>
+#include <RayTracingDevice.hpp>
+#include <util/MemoryLiterals.hpp>
+#include <volk.h>
 
 struct DeviceMemoryAllocation {
 	void* mappedPointer = nullptr;
@@ -13,28 +13,44 @@ struct DeviceMemoryAllocation {
 	VkDeviceSize memoryOffset;
 };
 
+struct BindResult {
+	size_t memoryIndex;
+	VkDeviceSize offset;
+	VkDeviceSize alignmentPadding;
+	void* mappedMemoryPointer;
+};
+
+struct ImageAllocation {
+	size_t memoryAllocationIndex;
+	VkDeviceSize offset;
+	VkDeviceSize size;
+};
+
 constexpr VkDeviceSize bufferMemorySize = 32_MiB;
 constexpr VkDeviceSize imageMemorySize = 256_MiB;
 
 class MemoryAllocator {
   public:
 	MemoryAllocator(RayTracingDevice& device);
-	//all buffers/images allocated should be destroyed before calling destructor
+	// all buffers/images allocated should be destroyed before calling destructor
 	~MemoryAllocator();
 
-	//returns mapped buffer pointer
+	// returns mapped buffer pointer
 	void* bindStagingBuffer(VkBuffer buffer, VkDeviceSize alignment);
 	void bindDeviceBuffer(VkBuffer buffer, VkDeviceSize alignment);
 
-	void bindDeviceImage(VkImage image, VkDeviceSize alignment);
+	ImageAllocation bindDeviceImage(VkImage image, VkDeviceSize alignment);
+
+	void freeImage(const ImageAllocation& allocation);
 
   private:
-	//generic function performing allocations and binding resources, returns mapped memory pointer (potentially invalid if memory was unmapped)
-	template<typename ResourceType>
-	void* bindResource(std::vector<DeviceMemoryAllocation>& allocations, ResourceType resource,
-					VkResult (*bindCommand)(VkDevice, ResourceType, VkDeviceMemory, VkDeviceSize),
-					VkDeviceSize size,
-					VkDeviceSize alignment, uint32_t memoryTypeIndex, const void* memoryAllocatePNext, VkDeviceSize memoryAllocateSize, bool mapMemory = false);
+	// generic function performing allocations and binding resources, returns mapped memory pointer (potentially invalid
+	// if memory was unmapped)
+	template <typename ResourceType>
+	BindResult bindResource(std::vector<DeviceMemoryAllocation>& allocations, ResourceType resource,
+							VkResult (*bindCommand)(VkDevice, ResourceType, VkDeviceMemory, VkDeviceSize),
+							VkDeviceSize size, VkDeviceSize alignment, uint32_t memoryTypeIndex,
+							const void* memoryAllocatePNext, VkDeviceSize memoryAllocateSize, bool mapMemory = false);
 
 	std::vector<DeviceMemoryAllocation> m_stagingBufferMemoryAllocations;
 	std::vector<DeviceMemoryAllocation> m_deviceBufferMemoryAllocations;
@@ -45,11 +61,11 @@ class MemoryAllocator {
 };
 
 template <typename ResourceType>
-void* MemoryAllocator::bindResource(std::vector<DeviceMemoryAllocation>& allocations, ResourceType resource,
-											   VkResult (*bindCommand)(VkDevice, ResourceType, VkDeviceMemory,
-																	   VkDeviceSize),
-											   VkDeviceSize size, VkDeviceSize alignment, uint32_t memoryTypeIndex,
-									const void* memoryAllocatePNext, VkDeviceSize memoryAllocateSize, bool mapMemory) {
+BindResult MemoryAllocator::bindResource(std::vector<DeviceMemoryAllocation>& allocations, ResourceType resource,
+										 VkResult (*bindCommand)(VkDevice, ResourceType, VkDeviceMemory, VkDeviceSize),
+										 VkDeviceSize size, VkDeviceSize alignment, uint32_t memoryTypeIndex,
+										 const void* memoryAllocatePNext, VkDeviceSize memoryAllocateSize,
+										 bool mapMemory) {
 	// Linear bump allocation for now, don't need freeing
 
 	VkMemoryAllocateInfo allocateInfo = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -77,11 +93,16 @@ void* MemoryAllocator::bindResource(std::vector<DeviceMemoryAllocation>& allocat
 		}
 
 		if (allocations[i].freeSize >= size + alignOffset) {
-			verifyResult(
-				bindCommand(m_device.device(), resource, allocations[i].memory, allocations[i].memoryOffset + alignOffset));
+			verifyResult(bindCommand(m_device.device(), resource, allocations[i].memory,
+									 allocations[i].memoryOffset + alignOffset));
+			VkDeviceSize allocationOffset = allocations[i].memoryOffset;
 			allocations[i].freeSize -= size + alignOffset;
 			allocations[i].memoryOffset += size + alignOffset;
-			return reinterpret_cast<uint8_t*>(allocations[i].mappedPointer) + allocations[i].memoryOffset - (size + alignOffset);
+			return { .memoryIndex = i,
+					 .offset = allocationOffset,
+					 .alignmentPadding = alignOffset,
+					 .mappedMemoryPointer = reinterpret_cast<uint8_t*>(allocations[i].mappedPointer) +
+											allocations[i].memoryOffset - (size + alignOffset) };
 		}
 	}
 
@@ -95,5 +116,7 @@ void* MemoryAllocator::bindResource(std::vector<DeviceMemoryAllocation>& allocat
 	memoryAllocation.memoryOffset += size;
 	allocations.push_back(memoryAllocation);
 
-	return allocations.back().mappedPointer;
+	return { .memoryIndex = allocations.size() - 1,
+			 .offset = 0,
+			 .mappedMemoryPointer = allocations.back().mappedPointer };
 }

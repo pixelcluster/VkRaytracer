@@ -5,16 +5,19 @@
 #extension GL_GOOGLE_include_directive : require
 
 layout(push_constant) uniform ScreenDim {
-	vec3 worldOffset;
+	vec4 worldOffset;
+	vec4 worldDirection;
+	vec4 worldRight;
+	vec4 worldUp;
 	float aspectRatio;
 	float tanHalfFoV;
 	float time;
 	uint accumulatedSampleCount;
 };
 
-layout(set = 0, binding = 0) uniform accelerationStructureEXT tlasStructure;
-layout(rgba32f, set = 0, binding = 1) restrict uniform image2D accumulationImage;
-layout(rgba8, set = 0, binding = 2) uniform image2D outputImage;
+layout(set = 1, binding = 0) uniform accelerationStructureEXT tlasStructure;
+layout(rgba32f, set = 0, binding = 0) restrict uniform image2D accumulationImage;
+layout(rgba8, set = 0, binding = 1) uniform image2D outputImage;
 
  #include "raytrace-common.glsl"
 
@@ -26,7 +29,7 @@ void nextRand(inout uint randomState) {
 	randomState = ((((randomState ^ randomState >> c)) ^ (c << 32 - c)) * 104122896) ^ (c << 7);
 }
 
-const uint nSamples = 16;
+const uint nSamples = 1;
 
 void main() {
 	vec4 prevAccumulatedRadiance = imageLoad(accumulationImage, ivec2(gl_LaunchIDEXT.xy));
@@ -38,22 +41,23 @@ void main() {
 		return;
 	}
 
-	vec2 point = (vec2(gl_LaunchIDEXT.xy) / vec2(gl_LaunchSizeEXT.xy)) * 2.0f.xx - 1.0f.xx;
-	vec3 origin = vec3(0.0f, 0.0f, 0.1f) + vec3(point * vec2(tanHalfFoV * aspectRatio, tanHalfFoV), 0.0f) * 0.1f;
-	vec3 projected = vec3(0.0f, 0.0f, 1.0f) + vec3(point * vec2(tanHalfFoV * aspectRatio, tanHalfFoV), 0.0f);
-
-	//stratified sampling for the two image dimensions
-
-	vec2 pixelSizeWorldSpace = vec2(tanHalfFoV * aspectRatio, tanHalfFoV) / vec2(gl_LaunchSizeEXT.xy);
-
 	uint randomSeed = gl_LaunchIDEXT.x + gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + floatBitsToUint(time);
 	nextRand(randomSeed);
-
+	
+	//stratified sampling for the two image dimensions
 	vec2 pixelJitter;
 	pixelJitter.x = randomSeed * uintBitsToFloat(0x2f800004U);
 	nextRand(randomSeed);
 	pixelJitter.y = randomSeed * uintBitsToFloat(0x2f800004U);
-	pixelJitter -= 1.0f; //pixelJitter is in [-0.5;0.5]
+	pixelJitter -= 0.5f; //pixelJitter is in [-0.5;0.5]
+
+	vec2 point = (vec2(gl_LaunchIDEXT.xy + pixelJitter) / vec2(gl_LaunchSizeEXT.xy)) - 0.5f;
+
+	vec3 frustumLL = worldDirection.xyz - worldUp.xyz * tanHalfFoV - worldRight.xyz * tanHalfFoV * aspectRatio;
+	vec3 frustumLR = worldDirection.xyz - worldUp.xyz * tanHalfFoV + worldRight.xyz * tanHalfFoV * aspectRatio;
+	vec3 frustumTL = worldDirection.xyz + worldUp.xyz * tanHalfFoV - worldRight.xyz * tanHalfFoV * aspectRatio;
+
+	vec3 projected = worldDirection.xyz + point.x * (frustumLR - frustumLL) + point.y * (frustumTL - frustumLL);
 
 	vec4 accumulatedRadiance = vec4(0.0f);
 	for(uint i = 0; i < nSamples; ++i) {
@@ -63,7 +67,7 @@ void main() {
 		payload.color = vec4(0.0f);
 		payload.recursionDepth = 0;
 
-		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, worldOffset, 0.0, normalize(projected - origin), 999999999.0f, 0);
+		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, worldOffset.xyz, 0.0, normalize(projected), 999999999.0f, 0);
 		accumulatedRadiance += payload.color / nSamples;
 	}
 

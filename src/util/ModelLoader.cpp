@@ -140,22 +140,38 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 		}
 	}
 
-	size_t vertexDataSize =
-		(m_totalVertexCount * 3 + m_totalUVCount * 2 + m_totalNormalCount * 3 + m_totalTangentCount * 4) *
-		sizeof(float);
+	size_t vertexDataSize = m_totalVertexCount * 3 * sizeof(float);
+	size_t normalDataSize = m_totalNormalCount * 3 * sizeof(float);
+	size_t tangentDataSize = m_totalTangentCount * 4 * sizeof(float);
+	size_t uvDataSize = m_totalUVCount * 2 * sizeof(float);
 	size_t indexDataSize = m_totalIndexCount * sizeof(uint32_t);
 
 	m_vertexData = reinterpret_cast<float*>(malloc(vertexDataSize));
+	m_normalData = reinterpret_cast<float*>(malloc(normalDataSize));
+	m_tangentData = reinterpret_cast<float*>(malloc(tangentDataSize));
+	m_uvData = reinterpret_cast<float*>(malloc(uvDataSize));
 	m_indexData = reinterpret_cast<uint32_t*>(malloc(indexDataSize));
 
+	VkSamplerCreateInfo samplerCreateInfo = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+											  .magFilter = VK_FILTER_LINEAR,
+											  .minFilter = VK_FILTER_LINEAR,
+											  .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+											  .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+											  .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT };
+	vkCreateSampler(m_device.device(), &samplerCreateInfo, nullptr, &m_fallbackSampler);
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_SAMPLER, m_fallbackSampler, "Fallback sampler");
+
+	// the layout, order and number of geometries stays the same, so one can just increment a global counter in
+	// order to get the geometry for a given primitive
+	size_t geometryIndex = 0;
 	size_t gltfDataIndex = 0;
 	for (auto& gltfFilename : gltfFilenames) {
 		cgltf_data* data = gltfData[gltfDataIndex];
 		if (data->scene) {
-			copySceneGeometries(data, data->scene);
+			copySceneGeometries(data, data->scene, geometryIndex);
 		} else {
 			for (cgltf_size i = 0; i < data->scenes_count; ++i) {
-				copySceneGeometries(data, data->scenes + i);
+				copySceneGeometries(data, data->scenes + i, geometryIndex);
 			}
 		}
 
@@ -165,24 +181,20 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 		for (cgltf_size i = 0; i < data->samplers_count; ++i) {
 			addSampler(data, data->samplers + i);
 		}
-		for (cgltf_size i = 0; i < data->samplers_count; ++i) {
+		for (cgltf_size i = 0; i < data->textures_count; ++i) {
 			addTexture(data, data->textures + i);
 		}
 		for (cgltf_size i = 0; i < data->materials_count; ++i) {
 			addMaterial(data, data->materials + i);
 		}
 
+		m_globalMaterialIndexOffset += data->materials_count;
+		m_globalSamplerIndexOffset += data->samplers_count;
+		m_globalImageIndexOffset += data->images_count;
+		m_globalTextureIndexOffset += data->textures_count;
+
 		++gltfDataIndex;
 	}
-
-	VkSamplerCreateInfo samplerCreateInfo = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-											  .magFilter = VK_FILTER_NEAREST,
-											  .minFilter = VK_FILTER_NEAREST,
-											  .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-											  .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-											  .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT };
-	vkCreateSampler(m_device.device(), &samplerCreateInfo, nullptr, &m_fallbackSampler);
-	setObjectName(m_device.device(), VK_OBJECT_TYPE_SAMPLER, m_fallbackSampler, "Fallback sampler");
 
 	// Allocate buffers (both staging and device local)
 
@@ -199,6 +211,33 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 
 	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_vertexBuffer, "Vertex buffer");
 	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_vertexStagingBuffer, "Vertex staging buffer");
+
+	bufferCreateInfo.size = normalDataSize;
+	stagingBufferCreateInfo.size = normalDataSize;
+
+	verifyResult(vkCreateBuffer(m_device.device(), &bufferCreateInfo, nullptr, &m_normalBuffer));
+	verifyResult(vkCreateBuffer(m_device.device(), &stagingBufferCreateInfo, nullptr, &m_normalStagingBuffer));
+
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_normalBuffer, "Normal buffer");
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_normalStagingBuffer, "Normal staging buffer");
+
+	bufferCreateInfo.size = tangentDataSize;
+	stagingBufferCreateInfo.size = tangentDataSize;
+
+	verifyResult(vkCreateBuffer(m_device.device(), &bufferCreateInfo, nullptr, &m_tangentBuffer));
+	verifyResult(vkCreateBuffer(m_device.device(), &stagingBufferCreateInfo, nullptr, &m_tangentStagingBuffer));
+
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_tangentBuffer, "Tangent buffer");
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_tangentStagingBuffer, "Tangent staging buffer");
+
+	bufferCreateInfo.size = uvDataSize;
+	stagingBufferCreateInfo.size = uvDataSize;
+
+	verifyResult(vkCreateBuffer(m_device.device(), &bufferCreateInfo, nullptr, &m_uvBuffer));
+	verifyResult(vkCreateBuffer(m_device.device(), &stagingBufferCreateInfo, nullptr, &m_uvStagingBuffer));
+
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_uvBuffer, "Texcoord buffer");
+	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_uvStagingBuffer, "Texcoord staging buffer");
 
 	bufferCreateInfo.size = indexDataSize;
 	stagingBufferCreateInfo.size = indexDataSize;
@@ -229,10 +268,16 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_geometryStagingBuffer, "Geometry staging buffer");
 
 	void* vertexStagingBufferData = m_allocator.bindStagingBuffer(m_vertexStagingBuffer, 0);
+	void* normalStagingBufferData = m_allocator.bindStagingBuffer(m_normalStagingBuffer, 0);
+	void* tangentStagingBufferData = m_allocator.bindStagingBuffer(m_tangentStagingBuffer, 0);
+	void* uvStagingBufferData = m_allocator.bindStagingBuffer(m_uvStagingBuffer, 0);
 	void* indexStagingBufferData = m_allocator.bindStagingBuffer(m_indexStagingBuffer, 0);
 	void* materialStagingBufferData = m_allocator.bindStagingBuffer(m_materialStagingBuffer, 0);
 	void* geometryStagingBufferData = m_allocator.bindStagingBuffer(m_geometryStagingBuffer, 0);
 	m_allocator.bindDeviceBuffer(m_vertexBuffer, 0);
+	m_allocator.bindDeviceBuffer(m_normalBuffer, 0);
+	m_allocator.bindDeviceBuffer(m_tangentBuffer, 0);
+	m_allocator.bindDeviceBuffer(m_uvBuffer, 0);
 	m_allocator.bindDeviceBuffer(m_indexBuffer, 0);
 	m_allocator.bindDeviceBuffer(m_materialBuffer, 0);
 	m_allocator.bindDeviceBuffer(m_geometryBuffer, 0);
@@ -244,6 +289,9 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	// Copy vertex data
 
 	std::memcpy(vertexStagingBufferData, m_vertexData, vertexDataSize);
+	std::memcpy(normalStagingBufferData, m_normalData, normalDataSize);
+	std::memcpy(tangentStagingBufferData, m_tangentData, tangentDataSize);
+	std::memcpy(uvStagingBufferData, m_uvData, uvDataSize);
 	std::memcpy(indexStagingBufferData, m_indexData, indexDataSize);
 
 	// Copy material/geometry data
@@ -349,6 +397,12 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	VkBufferCopy bufferCopy = { .size = vertexDataSize };
 
 	vkCmdCopyBuffer(commandBuffer, m_vertexStagingBuffer, m_vertexBuffer, 1, &bufferCopy);
+	bufferCopy.size = normalDataSize;
+	vkCmdCopyBuffer(commandBuffer, m_normalStagingBuffer, m_normalBuffer, 1, &bufferCopy);
+	bufferCopy.size = tangentDataSize;
+	vkCmdCopyBuffer(commandBuffer, m_tangentStagingBuffer, m_tangentBuffer, 1, &bufferCopy);
+	bufferCopy.size = uvDataSize;
+	vkCmdCopyBuffer(commandBuffer, m_uvStagingBuffer, m_uvBuffer, 1, &bufferCopy);
 	bufferCopy.size = indexDataSize;
 	vkCmdCopyBuffer(commandBuffer, m_indexStagingBuffer, m_indexBuffer, 1, &bufferCopy);
 	bufferCopy.size = m_materials.size() * sizeof(Material);
@@ -401,7 +455,11 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 		}
 
 		for (size_t i = 0; i < blitImages.size(); ++i) {
-			if (static_cast<uint32_t>(log2f(std::min(blitImages[i].width, blitImages[i].height))) == mipIndex + 1) {
+			if (std::min(blitImages[i].width, blitImages[i].height) == 0) {
+				printf("Detected mip level with size 0, ..somehow? minIndex = %ull\n", mipIndex);
+				blitImages.erase(blitImages.begin() + i);
+				--i;
+			} else if (std::min(blitImages[i].width, blitImages[i].height) < 4) {
 				blitImages.erase(blitImages.begin() + i);
 				--i;
 			}
@@ -425,7 +483,7 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	m_indexBufferDeviceAddress = vkGetBufferDeviceAddress(m_device.device(), &addressInfo);
 
 	VkDescriptorSetLayoutBinding binding = { .binding = 0,
-											 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+											 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 											 .descriptorCount = static_cast<uint32_t>(m_textures.size()),
 											 .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
 														   VK_SHADER_STAGE_ANY_HIT_BIT_KHR };
@@ -438,7 +496,7 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	verifyResult(
 		vkCreateDescriptorSetLayout(m_device.device(), &layoutCreateInfo, nullptr, &m_textureDescriptorSetLayout));
 
-	VkDescriptorPoolSize sampledImageSize = { .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+	VkDescriptorPoolSize sampledImageSize = { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 											  .descriptorCount = static_cast<uint32_t>(m_textures.size()) };
 	VkDescriptorPoolCreateInfo createInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 											  .maxSets = 1,
@@ -466,16 +524,50 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	}
 
 	free(m_vertexData);
+	free(m_normalData);
+	free(m_tangentData);
+	free(m_uvData);
 	free(m_indexData);
+
+	vkDestroyBuffer(m_device.device(), m_vertexStagingBuffer, nullptr);
+	vkDestroyBuffer(m_device.device(), m_normalStagingBuffer, nullptr);
+	vkDestroyBuffer(m_device.device(), m_tangentStagingBuffer, nullptr);
+	vkDestroyBuffer(m_device.device(), m_uvStagingBuffer, nullptr);
+	vkDestroyBuffer(m_device.device(), m_indexStagingBuffer, nullptr);
+	vkDestroyBuffer(m_device.device(), m_imageStagingBuffer, nullptr);
+
+	std::vector<VkDescriptorImageInfo> textureImageInfos;
+
+	textureImageInfos.reserve(m_textures.size());
+
+	for (auto& texture : m_textures) {
+		textureImageInfos.push_back({
+			.sampler = texture.sampler,
+			.imageView = texture.view,
+			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		});
+	}
+
+	VkWriteDescriptorSet setWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+									  .dstSet = m_textureDescriptorSet,
+									  .dstBinding = 0,
+									  .dstArrayElement = 0,
+									  .descriptorCount = static_cast<uint32_t>(m_textures.size()),
+									  .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+									  .pImageInfo = textureImageInfos.data() };
+	vkUpdateDescriptorSets(m_device.device(), 1, &setWrite, 0, nullptr);
 }
 
 ModelLoader::~ModelLoader() {
 	vkDestroyBuffer(m_device.device(), m_vertexBuffer, nullptr);
+	vkDestroyBuffer(m_device.device(), m_normalBuffer, nullptr);
+	vkDestroyBuffer(m_device.device(), m_tangentBuffer, nullptr);
+	vkDestroyBuffer(m_device.device(), m_uvBuffer, nullptr);
 	vkDestroyBuffer(m_device.device(), m_indexBuffer, nullptr);
-	vkDestroyBuffer(m_device.device(), m_vertexStagingBuffer, nullptr);
-	vkDestroyBuffer(m_device.device(), m_indexStagingBuffer, nullptr);
-	vkDestroyBuffer(m_device.device(), m_imageStagingBuffer, nullptr);
 
+	for (auto& view : m_textureImageViews) {
+		vkDestroyImageView(m_device.device(), view, nullptr);
+	}
 	for (auto& image : m_textureImages) {
 		vkDestroyImage(m_device.device(), image, nullptr);
 	}
@@ -655,22 +747,8 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 							  .ymax = aabbMax[1],
 							  .zmax = aabbMax[2] };
 
-			if (primitive->material) {
-				geometry.materialIndex =
-					primitive->material -
-					data->materials; // sure hope the material is in that array, otherwise bad stuff ensues
-
-				geometry.isAlphaTested = primitive->material->alpha_mode == cgltf_alpha_mode_mask;
-			}
-
 			std::memcpy(geometry.transformMatrix, transformMatrix, 16 * sizeof(float));
 
-			m_gpuGeometries.push_back({ .vertexOffset = static_cast<uint32_t>(geometry.vertexOffset),
-										.uvOffset = static_cast<uint32_t>(geometry.uvOffset),
-										.normalOffset = static_cast<uint32_t>(geometry.normalOffset),
-										.tangentOffset = static_cast<uint32_t>(geometry.tangentOffset),
-										.indexOffset = static_cast<uint32_t>(geometry.indexOffset),
-										.materialIndex = geometry.materialIndex });
 			m_geometries.push_back(std::move(geometry));
 		}
 	}
@@ -680,10 +758,7 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	}
 }
 
-void ModelLoader::copySceneGeometries(cgltf_data* data, cgltf_scene* scene) {
-	// the layout, order and number of geometries stays the same, so one can just increment a global counter in order to
-	// get the geometry for a given primitive
-	size_t geometryIndex = 0;
+void ModelLoader::copySceneGeometries(cgltf_data* data, cgltf_scene* scene, size_t& geometryIndex) {
 	for (cgltf_size i = 0; i < scene->nodes_count; ++i) {
 		copyNodeGeometries(data, scene->nodes[i], geometryIndex);
 	}
@@ -723,42 +798,42 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 						break;
 					case cgltf_attribute_type_normal:
 						if (!hasConsideredVertexAccessor) {
-							std::memcpy(m_vertexData + (m_currentVertexDataOffset / sizeof(float)),
+							std::memcpy(m_normalData + (m_currentNormalDataOffset / sizeof(float)),
 										reinterpret_cast<uint8_t*>(attribute->data->buffer_view->buffer->data) +
 											attribute->data->buffer_view->offset + attribute->data->offset,
 										attribute->data->count * 3 * sizeof(float));
 
-							m_geometries[currentGeometryIndex].normalOffset = m_currentVertexDataOffset;
-							m_copiedVertexDataAccessors.push_back({ attribute->data, m_currentVertexDataOffset });
-							m_currentVertexDataOffset += attribute->data->count * 3 * sizeof(float);
+							m_geometries[currentGeometryIndex].normalOffset = m_currentNormalDataOffset;
+							m_copiedVertexDataAccessors.push_back({ attribute->data, m_currentNormalDataOffset });
+							m_currentNormalDataOffset += attribute->data->count * 3 * sizeof(float);
 						} else {
 							m_geometries[currentGeometryIndex].normalOffset += vertexAccessorIterator->bufferOffset;
 						}
 						break;
 					case cgltf_attribute_type_tangent:
 						if (!hasConsideredVertexAccessor) {
-							std::memcpy(m_vertexData + (m_currentVertexDataOffset / sizeof(float)),
+							std::memcpy(m_tangentData + (m_currentTangentDataOffset / sizeof(float)),
 										reinterpret_cast<uint8_t*>(attribute->data->buffer_view->buffer->data) +
 											attribute->data->buffer_view->offset + attribute->data->offset,
 										attribute->data->count * 4 * sizeof(float));
 
-							m_geometries[currentGeometryIndex].tangentOffset = m_currentVertexDataOffset;
-							m_copiedVertexDataAccessors.push_back({ attribute->data, m_currentVertexDataOffset });
-							m_currentVertexDataOffset += attribute->data->count * 4 * sizeof(float);
+							m_geometries[currentGeometryIndex].tangentOffset = m_currentTangentDataOffset;
+							m_copiedVertexDataAccessors.push_back({ attribute->data, m_currentTangentDataOffset });
+							m_currentTangentDataOffset += attribute->data->count * 4 * sizeof(float);
 						} else {
 							m_geometries[currentGeometryIndex].tangentOffset += vertexAccessorIterator->bufferOffset;
 						}
 						break;
 					case cgltf_attribute_type_texcoord:
 						if (!hasConsideredVertexAccessor) {
-							std::memcpy(m_vertexData + (m_currentVertexDataOffset / sizeof(float)),
+							std::memcpy(m_uvData + (m_currentUVDataOffset / sizeof(float)),
 										reinterpret_cast<uint8_t*>(attribute->data->buffer_view->buffer->data) +
 											attribute->data->buffer_view->offset + attribute->data->offset,
 										attribute->data->count * 2 * sizeof(float));
 
-							m_geometries[currentGeometryIndex].uvOffset = m_currentVertexDataOffset;
-							m_copiedVertexDataAccessors.push_back({ attribute->data, m_currentVertexDataOffset });
-							m_currentVertexDataOffset += attribute->data->count * 2 * sizeof(float);
+							m_geometries[currentGeometryIndex].uvOffset = m_currentUVDataOffset;
+							m_copiedVertexDataAccessors.push_back({ attribute->data, m_currentUVDataOffset });
+							m_currentUVDataOffset += attribute->data->count * 2 * sizeof(float);
 						} else {
 							m_geometries[currentGeometryIndex].uvOffset += vertexAccessorIterator->bufferOffset;
 						}
@@ -807,6 +882,29 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 			} else {
 				m_geometries[currentGeometryIndex].indexOffset = indexAccessorIterator->bufferOffset;
 			}
+
+			
+
+			if (primitive->material) {
+				m_geometries[currentGeometryIndex].materialIndex =
+					primitive->material - data->materials +
+					m_globalMaterialIndexOffset; // sure hope the material is in that array, otherwise bad stuff ensues
+
+				m_geometries[currentGeometryIndex].isAlphaTested =
+					primitive->material->alpha_mode == cgltf_alpha_mode_mask;
+			}
+
+			m_gpuGeometries.push_back(
+				{ .vertexOffset =
+					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].vertexOffset / (sizeof(float) * 3)),
+				  .uvOffset = static_cast<uint32_t>(m_geometries[currentGeometryIndex].uvOffset / (sizeof(float) * 2)),
+				  .normalOffset =
+					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].normalOffset / (sizeof(float) * 3)),
+				  .tangentOffset =
+					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].tangentOffset / (sizeof(float) * 4)),
+				  .indexOffset =
+					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].indexOffset / sizeof(uint32_t)),
+				  .materialIndex = static_cast<uint32_t>(m_geometries[currentGeometryIndex].materialIndex + m_globalMaterialIndexOffset) });
 			++currentGeometryIndex;
 		}
 	}
@@ -832,18 +930,20 @@ void ModelLoader::addMaterial(cgltf_data* data, cgltf_material* material) {
 			newMaterial.ior = material->ior.ior;
 		}
 		if (material->normal_texture.texture) {
-			newMaterial.normalTextureIndex = material->normal_texture.texture - data->textures;
+			newMaterial.normalTextureIndex = material->normal_texture.texture - data->textures + m_globalTextureIndexOffset;
+			newMaterial.normalMapFactor = material->normal_texture.scale;
 		}
 		if (material->emissive_texture.texture) {
-			newMaterial.emissiveTextureIndex = material->emissive_texture.texture - data->textures;
+			newMaterial.emissiveTextureIndex =
+				material->emissive_texture.texture - data->textures + m_globalTextureIndexOffset;
 		}
 		if (material->pbr_metallic_roughness.base_color_texture.texture) {
-			newMaterial.albedoTextureIndex =
-				material->pbr_metallic_roughness.base_color_texture.texture - data->textures;
+			newMaterial.albedoTextureIndex = material->pbr_metallic_roughness.base_color_texture.texture -
+											 data->textures + m_globalTextureIndexOffset;
 		}
 		if (material->pbr_metallic_roughness.metallic_roughness_texture.texture) {
-			newMaterial.metallicRoughnessTextureIndex =
-				material->pbr_metallic_roughness.base_color_texture.texture - data->textures;
+			newMaterial.metallicRoughnessTextureIndex = material->pbr_metallic_roughness.base_color_texture.texture -
+														data->textures + m_globalTextureIndexOffset;
 		}
 
 		std::memcpy(newMaterial.albedoScale, material->pbr_metallic_roughness.base_color_factor, 4 * sizeof(float));
@@ -859,10 +959,10 @@ void ModelLoader::addTexture(cgltf_data* data, cgltf_texture* texture) {
 	if (!texture->sampler) {
 		newTexture.sampler = m_fallbackSampler;
 	} else {
-		newTexture.sampler = m_textureSamplers[texture->sampler - data->samplers];
+		newTexture.sampler = m_textureSamplers[texture->sampler - data->samplers + m_globalSamplerIndexOffset];
 	}
 
-	newTexture.image = m_textureImages[texture->image - data->images];
+	newTexture.view = m_textureImageViews[texture->image - data->images + m_globalImageIndexOffset];
 
 	m_textures.push_back(std::move(newTexture));
 }
@@ -906,6 +1006,26 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 	verifyResult(vkCreateImage(m_device.device(), &imageCreateInfo, nullptr, &createdImage));
 	m_allocator.bindDeviceImage(createdImage, 0);
 	m_textureImages.push_back(createdImage);
+
+	VkImageViewCreateInfo viewCreateInfo = { .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+											 .image = createdImage,
+											 .viewType = VK_IMAGE_VIEW_TYPE_2D,
+											 .format = VK_FORMAT_R8G8B8A8_SRGB,
+											 .components = { .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+															 .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+															 .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+															 .a = VK_COMPONENT_SWIZZLE_IDENTITY },
+											 .subresourceRange = {
+												 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+												 .baseMipLevel = 0,
+												 .levelCount = static_cast<uint32_t>(
+													 log2(std::min(imageData.width, imageData.height))),
+												 .baseArrayLayer = 0,
+												 .layerCount = 1,
+											 } };
+	VkImageView createdImageView;
+	verifyResult(vkCreateImageView(m_device.device(), &viewCreateInfo, nullptr, &createdImageView));
+	m_textureImageViews.push_back(createdImageView);
 }
 
 void ModelLoader::addSampler(cgltf_data* data, cgltf_sampler* sampler) {

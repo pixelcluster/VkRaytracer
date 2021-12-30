@@ -1,9 +1,14 @@
 #pragma once
 
 #include <RayTracingDevice.hpp>
+#include <util/MemoryAllocator.hpp>
+#include <util/OneTimeDispatcher.hpp>
 
 struct PushConstantData {
-	float worldOffset[3];
+	float worldOffset[4];
+	float worldDirection[4];
+	float worldRight[4];
+	float worldUp[4];
 	float aspectRatio;
 	float tanHalfFov;
 	float time;
@@ -12,18 +17,22 @@ struct PushConstantData {
 
 class PipelineBuilder {
   public:
-	PipelineBuilder(RayTracingDevice& device, uint32_t maxRayRecursionDepth);
+	PipelineBuilder(RayTracingDevice& device, MemoryAllocator& allocator, OneTimeDispatcher& oneTimeDispatcher, VkDescriptorSetLayout textureSetLayout, uint32_t maxRayRecursionDepth);
 	//copy/move implicitly deleted by reference to RayTracingDevice
 	~PipelineBuilder();
 
-	VkDescriptorSetLayout descriptorSetLayout() const { return m_descriptorSetLayout; }
-	VkDescriptorSetLayout geometryDataDescriptorSetLayout() const { return m_geometryDescriptorSetLayout; }
+	VkDescriptorSetLayout descriptorSetLayout() const { return m_imageDescriptorSetLayout; }
+	VkDescriptorSetLayout geometryDataDescriptorSetLayout() const { return m_generalDescriptorSetLayout; }
 
-	const VkDescriptorPoolCreateInfo& poolCreateInfo() const { return m_poolCreateInfo; }
+	VkDescriptorSet imageSet(size_t frameIndex) const { return m_imageDescriptorSets[frameIndex]; }
+	VkDescriptorSet generalSet() const { return m_generalDescriptorSet; }
 
-	VkStridedDeviceAddressRegionKHR hitDeviceAddressRegion(VkDeviceAddress bufferAddress) const;
-	VkStridedDeviceAddressRegionKHR missDeviceAddressRegion(VkDeviceAddress bufferAddress) const;
-	VkStridedDeviceAddressRegionKHR raygenDeviceAddressRegion(VkDeviceAddress bufferAddress) const;
+	VkPipeline pipeline() const { return m_pipeline; }
+	VkPipelineLayout pipelineLayout() const { return m_pipelineLayout; }
+
+	VkStridedDeviceAddressRegionKHR hitDeviceAddressRegion() const;
+	VkStridedDeviceAddressRegionKHR missDeviceAddressRegion() const;
+	VkStridedDeviceAddressRegionKHR raygenDeviceAddressRegion() const;
 
   private:
 	RayTracingDevice& m_device;
@@ -31,11 +40,15 @@ class PipelineBuilder {
 	VkPipeline m_pipeline;
 	VkPipelineLayout m_pipelineLayout;
 
-	VkDescriptorSetLayout m_descriptorSetLayout;
-	VkDescriptorSetLayout m_geometryDescriptorSetLayout;
+	VkBuffer m_sbtBuffer;
+	VkDeviceAddress m_sbtBufferDeviceAddress;
 
-	VkDescriptorPoolSize m_poolSizes[3];
-	VkDescriptorPoolCreateInfo m_poolCreateInfo;
+	VkDescriptorSetLayout m_imageDescriptorSetLayout;
+	VkDescriptorSetLayout m_generalDescriptorSetLayout;
+	
+	VkDescriptorPool m_descriptorPool;
+	VkDescriptorSet m_imageDescriptorSets[frameInFlightCount];
+	VkDescriptorSet m_generalDescriptorSet;
 
 	VkDeviceSize m_shaderGroupHandleSizeAligned;
 };

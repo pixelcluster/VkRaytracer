@@ -12,6 +12,7 @@ constexpr size_t numASSubdivisions = 8;
 struct AccelerationStructureGeometryInfo {
 	std::vector<VkAccelerationStructureGeometryKHR> geometries;
 	std::vector<VkAccelerationStructureBuildRangeInfoKHR> rangeInfos;
+	std::vector<size_t> geometryIndices;
 };
 
 AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& device, MemoryAllocator& memoryAllocator,
@@ -80,6 +81,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	transformMatrices.reserve(modelLoader.geometries().size());
 
 	size_t currentTransformBufferOffset = 0;
+	size_t geometryIndex = 0;
 	for (auto& geometry : modelLoader.geometries()) {
 		size_t asIndex = bestAccelerationStructureIndex(asAABBs, modelBounds, geometry.aabb);
 		asGeometryData[asIndex].geometries.push_back(
@@ -109,6 +111,9 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 			{ .primitiveCount = static_cast<uint32_t>(geometry.indexCount / 3) });
 		transformMatrices.push_back(transformMatrix);
 		currentTransformBufferOffset += sizeof(VkTransformMatrixKHR);
+
+		asGeometryData[asIndex].geometryIndices.push_back(geometryIndex);
+		++geometryIndex;
 	}
 
 	std::memcpy(mappedTransformStagingBuffer, transformMatrices.data(),
@@ -120,43 +125,56 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	std::vector<VkBuffer> uncompactedASBackingBuffers;
 	std::vector<VkAccelerationStructureKHR> uncompactedBLASes;
 	std::vector<VkBuffer> triangleASBuildScratchBuffers;
+	std::vector<size_t> geometryIndexBufferOffsets;
+
+	std::vector<uint32_t> geometryIndices;
+
 	buildInfos.reserve(numASSubdivisions);
+	geometryIndices.reserve(modelLoader.geometries().size());
 
 	VkBufferDeviceAddressInfo deviceAddressInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO };
 
 	for (auto& data : asGeometryData) {
-		buildRangeInfos.push_back({});
-		buildRangeInfos.back().reserve(data.geometries.size());
+		if (!data.geometries.empty()) {
+			buildRangeInfos.push_back({});
+			buildRangeInfos.back().reserve(data.geometries.size());
 
-		buildInfos.push_back({ .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-							   .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-							   .flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR |
-										VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-							   .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
-							   .geometryCount = static_cast<uint32_t>(data.geometries.size()),
-							   .pGeometries = data.geometries.data() });
+			buildInfos.push_back({ .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+								   .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+								   .flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR |
+											VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+								   .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+								   .geometryCount = static_cast<uint32_t>(data.geometries.size()),
+								   .pGeometries = data.geometries.data() });
 
-		std::vector<uint32_t> primitiveCounts;
-		primitiveCounts.reserve(data.rangeInfos.size());
+			std::vector<uint32_t> primitiveCounts;
+			primitiveCounts.reserve(data.rangeInfos.size());
 
-		for (auto& info : data.rangeInfos) {
-			buildRangeInfos.back().push_back(info);
-			primitiveCounts.push_back(info.primitiveCount);
+			for (auto& info : data.rangeInfos) {
+				buildRangeInfos.back().push_back(info);
+				primitiveCounts.push_back(info.primitiveCount);
+			}
+
+			geometryIndexBufferOffsets.push_back(geometryIndices.size());
+			for (auto& index : data.geometryIndices) {
+				geometryIndices.push_back(index);
+			}
+
+			AccelerationStructureData accelerationStructureData = createAccelerationStructure(
+				buildInfos.back(), primitiveCounts,
+				accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment);
+
+			buildInfos.back().dstAccelerationStructure = accelerationStructureData.accelerationStructure;
+			buildInfos.back().scratchData = { .deviceAddress = accelerationStructureData.scratchBufferDeviceAddress };
+
+			uncompactedASBackingBuffers.push_back(accelerationStructureData.backingBuffer);
+			uncompactedBLASes.push_back(accelerationStructureData.accelerationStructure);
+			triangleASBuildScratchBuffers.push_back(accelerationStructureData.scratchBuffer);
+			ptrBuildRangeInfos.push_back(buildRangeInfos.back().data());
 		}
-
-		AccelerationStructureData accelerationStructureData =
-			createAccelerationStructure(buildInfos.back(), primitiveCounts,
-										accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment);
-
-		buildInfos.back().dstAccelerationStructure = accelerationStructureData.accelerationStructure;
-		buildInfos.back().scratchData = { .deviceAddress = accelerationStructureData.scratchBufferDeviceAddress };
-
-		uncompactedASBackingBuffers.push_back(accelerationStructureData.backingBuffer);
-		uncompactedBLASes.push_back(accelerationStructureData.accelerationStructure);
-		triangleASBuildScratchBuffers.push_back(accelerationStructureData.scratchBuffer);
-		ptrBuildRangeInfos.push_back(buildRangeInfos.back().data());
 	}
 
+	VkBuffer lightDataStagingBuffer;
 	VkBuffer sphereAABBBuffer;
 	VkDeviceAddress sphereAABBBufferDeviceAddress;
 	VkBuffer sphereAABBStagingBuffer;
@@ -187,7 +205,8 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
 			.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
 			.geometry = { .aabbs = { .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
-									 .data = sphereAABBBufferDeviceAddress } },
+									 .data = sphereAABBBufferDeviceAddress,
+									 .stride = sizeof(VkAabbPositionsKHR) } },
 			.flags = VK_GEOMETRY_OPAQUE_BIT_KHR
 		};
 
@@ -204,7 +223,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 		uint32_t sphereCount = lightSpheres.size();
 
 		sphereBLASData =
-			createAccelerationStructure(sphereBuildInfo, { sphereCount },
+			createAccelerationStructure(sphereBuildInfo, { 1 },
 										accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment);
 
 		sphereBuildInfo.dstAccelerationStructure = sphereBLASData.accelerationStructure;
@@ -221,21 +240,39 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 																   VK_BUFFER_USAGE_TRANSFER_DST_BIT };
 
 		verifyResult(vkCreateBuffer(m_device.device(), &sphereDataBufferCreateInfo, nullptr, &m_lightDataBuffer));
+
 		sphereDataBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		verifyResult(
-			vkCreateBuffer(m_device.device(), &sphereDataBufferCreateInfo, nullptr, &m_lightDataStagingBuffer));
+			vkCreateBuffer(m_device.device(), &sphereDataBufferCreateInfo, nullptr, &lightDataStagingBuffer));
 
 		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_lightDataBuffer, "Light Data buffer");
-		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_lightDataStagingBuffer, "Light Data staging buffer");
+		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, lightDataStagingBuffer, "Light Data staging buffer");
 
 		m_allocator.bindDeviceBuffer(m_lightDataBuffer, 0);
-		void* mappedLightDataStagingBuffer = m_allocator.bindStagingBuffer(m_lightDataStagingBuffer, 0);
+		void* mappedLightDataStagingBuffer = m_allocator.bindStagingBuffer(lightDataStagingBuffer, 0);
 
 		std::memcpy(mappedLightDataStagingBuffer, lightSpheres.data(), sphereCount * sizeof(Sphere));
 
 		sphereBuildInfo.dstAccelerationStructure = sphereBLASData.accelerationStructure;
 		sphereBuildInfo.scratchData = { .deviceAddress = sphereBLASData.scratchBufferDeviceAddress };
+
+		m_lightDataBufferSize = sphereCount * sizeof(Sphere);
 	}
+
+	m_geometryIndexBufferSize = geometryIndices.size() * sizeof(uint32_t);
+	VkBufferCreateInfo geometryIndexBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+														 .size = geometryIndices.size() * sizeof(uint32_t),
+														 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+																  VK_BUFFER_USAGE_TRANSFER_DST_BIT };
+	verifyResult(vkCreateBuffer(m_device.device(), &geometryIndexBufferCreateInfo, nullptr, &m_geometryIndexBuffer));
+	geometryIndexBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	VkBuffer geometryIndexStagingBuffer;
+	verifyResult(vkCreateBuffer(m_device.device(), &geometryIndexBufferCreateInfo, nullptr, &geometryIndexStagingBuffer));
+
+	m_allocator.bindDeviceBuffer(m_geometryIndexBuffer, 0);
+	void* mappedGeometryIndexBuffer = m_allocator.bindStagingBuffer(geometryIndexStagingBuffer, 0);
+
+	std::memcpy(mappedGeometryIndexBuffer, geometryIndices.data(), m_geometryIndexBufferSize);
 
 	VkQueryPool compactionSizeQueryPool;
 
@@ -243,8 +280,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 														  .queryType =
 															  VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR,
 														  .queryCount = static_cast<uint32_t>(buildInfos.size()) };
-	verifyResult(
-		vkCreateQueryPool(m_device.device(), &blasSizeQueryPoolCreateInfo, nullptr, &compactionSizeQueryPool));
+	verifyResult(vkCreateQueryPool(m_device.device(), &blasSizeQueryPoolCreateInfo, nullptr, &compactionSizeQueryPool));
 
 	std::vector<VkCommandBuffer> commandBuffers = m_dispatcher.allocateOneTimeSubmitBuffers(2);
 	VkCommandBuffer blasBuildBuffer = commandBuffers[0];
@@ -257,12 +293,15 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	VkBufferCopy bufferCopy = { .size = transformMatrices.size() * sizeof(VkTransformMatrixKHR) };
 	vkCmdCopyBuffer(blasBuildBuffer, triangleTransformStagingBuffer, triangleTransformBuffer, 1, &bufferCopy);
 
+	bufferCopy.size = m_geometryIndexBufferSize;
+	vkCmdCopyBuffer(blasBuildBuffer, geometryIndexStagingBuffer, m_geometryIndexBuffer, 1, &bufferCopy);
+
 	if (lightSpheres.size() > 0) {
 		bufferCopy.size = sizeof(VkAabbPositionsKHR);
 		vkCmdCopyBuffer(blasBuildBuffer, sphereAABBStagingBuffer, sphereAABBBuffer, 1, &bufferCopy);
 
 		bufferCopy.size = lightSpheres.size() * sizeof(Sphere);
-		vkCmdCopyBuffer(blasBuildBuffer, m_lightDataStagingBuffer, m_lightDataBuffer, 1, &bufferCopy);
+		vkCmdCopyBuffer(blasBuildBuffer, lightDataStagingBuffer, m_lightDataBuffer, 1, &bufferCopy);
 	}
 
 	VkMemoryBarrier barrier = { .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
@@ -280,6 +319,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	vkCmdPipelineBarrier(blasBuildBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
 						 VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0,
 						 nullptr);
+
 	vkCmdWriteAccelerationStructuresPropertiesKHR(
 		blasBuildBuffer, static_cast<uint32_t>(uncompactedBLASes.size()), uncompactedBLASes.data(),
 		VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, compactionSizeQueryPool, 0);
@@ -336,9 +376,9 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 		m_triangleASBackingBuffers.push_back(data.backingBuffer);
 
 		tlasInstances.push_back({ .transform = { .matrix = { { 1.0f, 0.0f, 0.0f, 1.0f },
-															 { 0.0f, 1.0f, 0.0f, 1.0f },
+															 { 0.0f, -1.0f, 0.0f, 1.0f },
 															 { 0.0f, 0.0f, 1.0f, 1.0f } } },
-								  .instanceCustomIndex = instanceIndex,
+								  .instanceCustomIndex = static_cast<uint32_t>(geometryIndexBufferOffsets[instanceIndex]),
 								  .mask = 0xFF,
 								  .instanceShaderBindingTableRecordOffset = triangleSBTIndex,
 								  .accelerationStructureReference = data.accelerationStructureDeviceAddress });
@@ -385,9 +425,9 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 		.pGeometries = &tlasGeometry
 	};
 
-	AccelerationStructureData tlasData =
-		createAccelerationStructure(tlasBuildInfo, { static_cast<uint32_t>(tlasInstances.size()) },
-									accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment, true);
+	AccelerationStructureData tlasData = createAccelerationStructure(
+		tlasBuildInfo, { static_cast<uint32_t>(tlasInstances.size()) },
+		accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment, true);
 
 	tlasBuildInfo.dstAccelerationStructure = tlasData.accelerationStructure;
 	tlasBuildInfo.scratchData = { .deviceAddress = tlasData.scratchBufferDeviceAddress };
@@ -466,7 +506,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	vkDestroyBuffer(m_device.device(), tlasData.scratchBuffer, nullptr);
 
 	if (lightSpheres.size() > 0)
-		vkDestroyBuffer(m_device.device(), m_lightDataStagingBuffer, nullptr);
+		vkDestroyBuffer(m_device.device(), lightDataStagingBuffer, nullptr);
 }
 
 AccelerationStructureBuilder::~AccelerationStructureBuilder() {

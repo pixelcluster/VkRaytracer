@@ -75,6 +75,7 @@ struct Material {
 
 	float roughnessFactor;
 	float metallicFactor;
+	float normalMapFactor;
 
 	float ior = 1.5f;
 
@@ -87,7 +88,7 @@ struct Material {
 };
 
 struct Texture {
-	VkImage image;
+	VkImageView view;
 	VkSampler sampler;
 };
 
@@ -119,12 +120,21 @@ class ModelLoader {
 	const AABB& modelBounds() const { return m_modelBounds; }
 
 	VkBuffer vertexBuffer() const { return m_vertexBuffer; }
+	VkBuffer uvBuffer() const { return m_uvBuffer; }
+	VkBuffer normalBuffer() const { return m_normalBuffer; }
+	VkBuffer tangentBuffer() const { return m_tangentBuffer; }
 	VkBuffer indexBuffer() const { return m_indexBuffer; }
 	VkBuffer materialBuffer() const { return m_materialBuffer; }
 	VkBuffer geometryBuffer() const { return m_geometryBuffer; }
 
 	VkDeviceAddress vertexBufferDeviceAddress() const { return m_vertexBufferDeviceAddress; }
 	VkDeviceAddress indexBufferDeviceAddress() const { return m_indexBufferDeviceAddress; }
+
+	size_t materialCount() const { return m_materials.size(); }
+	size_t uvBufferSize() const { return m_totalUVCount * sizeof(float) * 2; }
+	size_t normalBufferSize() const { return m_totalNormalCount * sizeof(float) * 3; }
+	size_t tangentBufferSize() const { return m_totalTangentCount * sizeof(float) * 4; }
+	size_t indexBufferSize() const { return m_totalIndexCount * sizeof(uint32_t); }
 
 	const std::vector<Geometry>& geometries() const { return m_geometries; }
 
@@ -141,7 +151,7 @@ class ModelLoader {
 	void addScene(cgltf_data* data, cgltf_scene* scene);
 	void addNode(cgltf_data* data, cgltf_node* node, float translation[3], float rotation[4], float scale[3]);
 
-	void copySceneGeometries(cgltf_data* data, cgltf_scene* scene);
+	void copySceneGeometries(cgltf_data* data, cgltf_scene* scene, size_t& currentGeometryIndex);
 	void copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t& currentGeometryIndex);
 
 	void addMaterial(cgltf_data* data, cgltf_material* material);
@@ -162,11 +172,17 @@ class ModelLoader {
 	VkDeviceAddress m_indexBufferDeviceAddress;
 
 	VkBuffer m_vertexBuffer;
+	VkBuffer m_uvBuffer;
+	VkBuffer m_normalBuffer;
+	VkBuffer m_tangentBuffer;
 	VkBuffer m_indexBuffer;
 	VkBuffer m_geometryBuffer;
 	VkBuffer m_materialBuffer;
 
 	VkBuffer m_vertexStagingBuffer;
+	VkBuffer m_uvStagingBuffer;
+	VkBuffer m_normalStagingBuffer;
+	VkBuffer m_tangentStagingBuffer;
 	VkBuffer m_indexStagingBuffer;
 	VkBuffer m_geometryStagingBuffer;
 	VkBuffer m_materialStagingBuffer;
@@ -178,6 +194,7 @@ class ModelLoader {
 
 	VkBuffer m_imageStagingBuffer;
 	std::vector<VkImage> m_textureImages;
+	std::vector<VkImageView> m_textureImageViews;
 	std::vector<VkSampler> m_textureSamplers;
 	std::vector<Texture> m_textures;
 	std::vector<Material> m_materials;
@@ -190,7 +207,7 @@ class ModelLoader {
 	VkDescriptorSet m_textureDescriptorSet;
 	VkDescriptorSetLayout m_textureDescriptorSetLayout;
 
-	//tempoary model loading metadata
+	// tempoary model loading metadata
 
 	std::vector<CopiedAccessor> m_copiedVertexDataAccessors;
 	std::vector<CopiedAccessor> m_copiedIndexDataAccessors;
@@ -202,11 +219,22 @@ class ModelLoader {
 	size_t m_totalIndexCount = 0;
 
 	size_t m_currentVertexDataOffset = 0;
+	size_t m_currentUVDataOffset = 0;
+	size_t m_currentNormalDataOffset = 0;
+	size_t m_currentTangentDataOffset = 0;
 	size_t m_currentIndexDataOffset = 0;
 
 	size_t m_combinedImageSize = 0;
 	size_t m_maxImageSize = 0;
 
+	size_t m_globalMaterialIndexOffset = 0;
+	size_t m_globalSamplerIndexOffset = 0;
+	size_t m_globalImageIndexOffset = 0;
+	size_t m_globalTextureIndexOffset = 0;
+
 	float* m_vertexData;
+	float* m_uvData;
+	float* m_normalData;
+	float* m_tangentData;
 	uint32_t* m_indexData;
 };
