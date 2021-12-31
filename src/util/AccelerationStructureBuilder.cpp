@@ -101,12 +101,12 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 																			   currentTransformBufferOffset } } },
 			  .flags = geometry.isAlphaTested ? 0U : VK_GEOMETRY_OPAQUE_BIT_KHR });
 		VkTransformMatrixKHR transformMatrix = { .matrix = {
-													 { geometry.transformMatrix[0], geometry.transformMatrix[1],
-													   geometry.transformMatrix[2], geometry.transformMatrix[3] },
-													 { geometry.transformMatrix[4], geometry.transformMatrix[5],
-													   geometry.transformMatrix[6], geometry.transformMatrix[7] },
-													 { geometry.transformMatrix[8], geometry.transformMatrix[9],
-													   geometry.transformMatrix[10], geometry.transformMatrix[11] } } };
+													 { geometry.transformMatrix[0], geometry.transformMatrix[4],
+													   geometry.transformMatrix[8], geometry.transformMatrix[12] },
+													 { geometry.transformMatrix[1], geometry.transformMatrix[5],
+													   geometry.transformMatrix[9], geometry.transformMatrix[13] },
+													 { geometry.transformMatrix[2], geometry.transformMatrix[6],
+													   geometry.transformMatrix[10], geometry.transformMatrix[14] } } };
 		asGeometryData[asIndex].rangeInfos.push_back(
 			{ .primitiveCount = static_cast<uint32_t>(geometry.indexCount / 3) });
 		transformMatrices.push_back(transformMatrix);

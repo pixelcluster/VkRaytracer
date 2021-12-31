@@ -163,7 +163,7 @@ void main() {
 	vec3 incomingRadiance = vec3(0.0f);
 
 	if(emissiveTexIndex != 65535)
-		incomingRadiance += texture(textures[nonuniformEXT(emissiveTexIndex)], texCoords).rgb * material.emissiveFactor.rgb;
+		incomingRadiance += texture(textures[nonuniformEXT(emissiveTexIndex)], texCoords).rgb * material.emissiveFactor.rgb * 500.0f;
 
 	float roughness = material.roughnessFactor;
 	if(metalRoughTexIndex != 65535)

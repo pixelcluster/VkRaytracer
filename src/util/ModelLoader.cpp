@@ -208,7 +208,8 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 											.size = vertexDataSize,
 											.usage =
 												VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
-												VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT };
+												VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+												VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT };
 	VkBufferCreateInfo stagingBufferCreateInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 												   .size = vertexDataSize,
 												   .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT };
@@ -254,7 +255,8 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_indexBuffer, "Index buffer");
 	setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_indexStagingBuffer, "Index staging buffer");
 
-	bufferCreateInfo.usage &= ~(VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+	bufferCreateInfo.usage &= ~(VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+								VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 	bufferCreateInfo.size = m_materials.size() * sizeof(Material);
 	stagingBufferCreateInfo.size = m_materials.size() * sizeof(Material);
 
@@ -454,8 +456,8 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 				.dstOffsets = { {}, { .x = mipWidth, .y = mipHeight, .z = 1 } },
 			};
 
-			vkCmdBlitImage(commandBuffer, image.image, VK_IMAGE_LAYOUT_GENERAL, image.image,
-						   VK_IMAGE_LAYOUT_GENERAL, 1, &blit, VK_FILTER_LINEAR);
+			vkCmdBlitImage(commandBuffer, image.image, VK_IMAGE_LAYOUT_GENERAL, image.image, VK_IMAGE_LAYOUT_GENERAL, 1,
+						   &blit, VK_FILTER_LINEAR);
 			image.height = mipHeight;
 			image.width = mipWidth;
 		}
@@ -547,11 +549,9 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	textureImageInfos.reserve(m_textures.size());
 
 	for (auto& texture : m_textures) {
-		textureImageInfos.push_back({
-			.sampler = texture.sampler,
-			.imageView = texture.view,
-			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		});
+		textureImageInfos.push_back({ .sampler = texture.sampler,
+									  .imageView = texture.view,
+									  .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
 	}
 
 	VkWriteDescriptorSet setWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -889,8 +889,6 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 				m_geometries[currentGeometryIndex].indexOffset = indexAccessorIterator->bufferOffset;
 			}
 
-			
-
 			if (primitive->material) {
 				if (primitive->material->normal_texture.texture) {
 					m_textureImageNormalUsage[primitive->material->normal_texture.texture->image - data->images +
@@ -914,7 +912,8 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].tangentOffset / (sizeof(float) * 4)),
 				  .indexOffset =
 					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].indexOffset / sizeof(uint32_t)),
-				  .materialIndex = static_cast<uint32_t>(m_geometries[currentGeometryIndex].materialIndex + m_globalMaterialIndexOffset) });
+				  .materialIndex = static_cast<uint32_t>(m_geometries[currentGeometryIndex].materialIndex +
+														 m_globalMaterialIndexOffset) });
 			++currentGeometryIndex;
 		}
 	}
@@ -940,7 +939,8 @@ void ModelLoader::addMaterial(cgltf_data* data, cgltf_material* material) {
 			newMaterial.ior = material->ior.ior;
 		}
 		if (material->normal_texture.texture) {
-			newMaterial.normalTextureIndex = material->normal_texture.texture - data->textures + m_globalTextureIndexOffset;
+			newMaterial.normalTextureIndex =
+				material->normal_texture.texture - data->textures + m_globalTextureIndexOffset;
 			newMaterial.normalMapFactor = material->normal_texture.scale;
 		}
 		if (material->emissive_texture.texture) {
@@ -956,11 +956,23 @@ void ModelLoader::addMaterial(cgltf_data* data, cgltf_material* material) {
 														data->textures + m_globalTextureIndexOffset;
 		}
 
-		std::memcpy(newMaterial.albedoScale, material->pbr_metallic_roughness.base_color_factor, 4 * sizeof(float));
-		std::memcpy(newMaterial.emissiveFactor, material->emissive_factor, 3 * sizeof(float));
+		newMaterial.albedoScale[0] = material->pbr_metallic_roughness.base_color_factor[0];
+		newMaterial.albedoScale[1] = material->pbr_metallic_roughness.base_color_factor[1];
+		newMaterial.albedoScale[2] = material->pbr_metallic_roughness.base_color_factor[2];
+		newMaterial.albedoScale[3] = material->pbr_metallic_roughness.base_color_factor[3];
+		newMaterial.emissiveFactor[0] = material->emissive_factor[0];
+		newMaterial.emissiveFactor[1] = material->emissive_factor[1];
+		newMaterial.emissiveFactor[2] = material->emissive_factor[2];
+		newMaterial.emissiveFactor[3] = 1.0f;
 		newMaterial.roughnessFactor = material->pbr_metallic_roughness.roughness_factor;
 		newMaterial.metallicFactor = material->pbr_metallic_roughness.metallic_factor;
 		newMaterial.alphaCutoff = material->alpha_mode == cgltf_alpha_mode_mask ? material->alpha_cutoff : 0.0f;
+
+		if (material->has_emissive_strength) {
+			newMaterial.emissiveFactor[0] *= material->emissive_strength.emissive_strength;
+			newMaterial.emissiveFactor[1] *= material->emissive_strength.emissive_strength;
+			newMaterial.emissiveFactor[2] *= material->emissive_strength.emissive_strength;
+		}
 	}
 	m_materials.push_back(std::move(newMaterial));
 }
@@ -1002,7 +1014,8 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 	VkImageCreateInfo imageCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
 		.imageType = VK_IMAGE_TYPE_2D,
-		.format = m_textureImageNormalUsage[image - data->images + m_globalImageIndexOffset] ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB,
+		.format = m_textureImageNormalUsage[image - data->images + m_globalImageIndexOffset] ? VK_FORMAT_R8G8B8A8_UNORM
+																							 : VK_FORMAT_R8G8B8A8_SRGB,
 		.extent = { .width = static_cast<uint32_t>(imageData.width),
 					.height = static_cast<uint32_t>(imageData.height),
 					.depth = 1 },
@@ -1018,24 +1031,24 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 	m_allocator.bindDeviceImage(createdImage, 0);
 	m_textureImages.push_back(createdImage);
 
-	VkImageViewCreateInfo viewCreateInfo = { .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-											 .image = createdImage,
-											 .viewType = VK_IMAGE_VIEW_TYPE_2D,
+	VkImageViewCreateInfo
+		viewCreateInfo = { .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+						   .image = createdImage,
+						   .viewType = VK_IMAGE_VIEW_TYPE_2D,
 						   .format = m_textureImageNormalUsage[image - data->images + m_globalImageIndexOffset]
 										 ? VK_FORMAT_R8G8B8A8_UNORM
 										 : VK_FORMAT_R8G8B8A8_SRGB,
-											 .components = { .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-															 .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-															 .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-															 .a = VK_COMPONENT_SWIZZLE_IDENTITY },
-											 .subresourceRange = {
-												 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-												 .baseMipLevel = 0,
-												 .levelCount = static_cast<uint32_t>(
-													 log2(std::min(imageData.width, imageData.height))),
-												 .baseArrayLayer = 0,
-												 .layerCount = 1,
-											 } };
+						   .components = { .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+										   .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+										   .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+										   .a = VK_COMPONENT_SWIZZLE_IDENTITY },
+						   .subresourceRange = {
+							   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+							   .baseMipLevel = 0,
+							   .levelCount = static_cast<uint32_t>(log2(std::min(imageData.width, imageData.height))),
+							   .baseArrayLayer = 0,
+							   .layerCount = 1,
+						   } };
 	VkImageView createdImageView;
 	verifyResult(vkCreateImageView(m_device.device(), &viewCreateInfo, nullptr, &createdImageView));
 	m_textureImageViews.push_back(createdImageView);
