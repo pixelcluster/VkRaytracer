@@ -122,6 +122,8 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	std::vector<cgltf_data*> gltfData;
 	gltfData.reserve(gltfFilenames.size());
 
+	size_t totalImageCount = 0;
+
 	for (auto& gltfFilename : gltfFilenames) {
 		cgltf_options options = {};
 		cgltf_data* data;
@@ -138,7 +140,11 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 				addScene(data, data->scenes + i);
 			}
 		}
+
+		totalImageCount += data->images_count;
 	}
+
+	m_textureImageNormalUsage.resize(totalImageCount);
 
 	size_t vertexDataSize = m_totalVertexCount * 3 * sizeof(float);
 	size_t normalDataSize = m_totalNormalCount * 3 * sizeof(float);
@@ -886,6 +892,10 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 			
 
 			if (primitive->material) {
+				if (primitive->material->normal_texture.texture) {
+					m_textureImageNormalUsage[primitive->material->normal_texture.texture->image - data->images +
+											  m_globalImageIndexOffset] = true;
+				}
 				m_geometries[currentGeometryIndex].materialIndex =
 					primitive->material - data->materials +
 					m_globalMaterialIndexOffset; // sure hope the material is in that array, otherwise bad stuff ensues
@@ -950,6 +960,7 @@ void ModelLoader::addMaterial(cgltf_data* data, cgltf_material* material) {
 		std::memcpy(newMaterial.emissiveFactor, material->emissive_factor, 3 * sizeof(float));
 		newMaterial.roughnessFactor = material->pbr_metallic_roughness.roughness_factor;
 		newMaterial.metallicFactor = material->pbr_metallic_roughness.metallic_factor;
+		newMaterial.alphaCutoff = material->alpha_mode == cgltf_alpha_mode_mask ? material->alpha_cutoff : 0.0f;
 	}
 	m_materials.push_back(std::move(newMaterial));
 }
@@ -991,7 +1002,7 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 	VkImageCreateInfo imageCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
 		.imageType = VK_IMAGE_TYPE_2D,
-		.format = VK_FORMAT_R8G8B8A8_SRGB,
+		.format = m_textureImageNormalUsage[image - data->images + m_globalImageIndexOffset] ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB,
 		.extent = { .width = static_cast<uint32_t>(imageData.width),
 					.height = static_cast<uint32_t>(imageData.height),
 					.depth = 1 },
@@ -1010,7 +1021,9 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 	VkImageViewCreateInfo viewCreateInfo = { .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 											 .image = createdImage,
 											 .viewType = VK_IMAGE_VIEW_TYPE_2D,
-											 .format = VK_FORMAT_R8G8B8A8_SRGB,
+						   .format = m_textureImageNormalUsage[image - data->images + m_globalImageIndexOffset]
+										 ? VK_FORMAT_R8G8B8A8_UNORM
+										 : VK_FORMAT_R8G8B8A8_SRGB,
 											 .components = { .r = VK_COMPONENT_SWIZZLE_IDENTITY,
 															 .g = VK_COMPONENT_SWIZZLE_IDENTITY,
 															 .b = VK_COMPONENT_SWIZZLE_IDENTITY,

@@ -26,6 +26,7 @@ struct BufferAllocationRequirements {
 class RayTracingDevice {
   public:
 	RayTracingDevice(size_t windowWidth, size_t windowHeight, bool enableHardwareRaytracing);
+	RayTracingDevice(bool enableHardwareRaytracing);
 	~RayTracingDevice();
 
 	RayTracingDevice(const RayTracingDevice&) = delete;
@@ -55,6 +56,8 @@ class RayTracingDevice {
 	const Window& window() const { return m_window; }
 
   private:
+	void init(bool enableHardwareRaytracing);
+
 	void createPerFrameData(size_t index);
 	void createSwapchainResources();
 

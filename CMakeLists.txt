@@ -45,7 +45,7 @@ foreach(SHADER IN LISTS SHADERS)
 
 	list(APPEND SHADER_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/depend-dummy-${FILENAME}.${EXTENSION}")
 	add_custom_command(OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/shaders/depend-dummy-${FILENAME}.${EXTENSION}"
-					   COMMAND "glslangValidator" ARGS "-g" "-Od" "--target-env" "vulkan1.2" "-o" "${CMAKE_CURRENT_BINARY_DIR}/shaders/${FILENAME}-${EXTENSION}.spv" ${SOURCEPATH}
+					   COMMAND "glslc" ARGS "-O" "--target-env=vulkan1.2" "-o" "${CMAKE_CURRENT_BINARY_DIR}/shaders/${FILENAME}-${EXTENSION}.spv" ${SOURCEPATH}
 					   DEPENDS ${SOURCEPATH})
 endforeach()
 

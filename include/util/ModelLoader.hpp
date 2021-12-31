@@ -198,6 +198,7 @@ class ModelLoader {
 	std::vector<VkSampler> m_textureSamplers;
 	std::vector<Texture> m_textures;
 	std::vector<Material> m_materials;
+	std::vector<bool> m_textureImageNormalUsage;
 
 	VkSampler m_fallbackSampler;
 

@@ -23,7 +23,37 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugMessageCallback(VkDebugUtilsMessageSeverityF
 }
 
 RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool enableHardwareRaytracing)
-	: m_window("Vulkan Hardware Ray Tracing Test", windowWidth, windowHeight) {
+	: m_window("Vulkan Hardware Ray Tracing", windowWidth, windowHeight) {
+	init(enableHardwareRaytracing);
+}
+
+RayTracingDevice::RayTracingDevice(bool enableHardwareRaytracing) : m_window("Vulkan Hardware Ray Tracing") {
+	init(enableHardwareRaytracing);
+}
+
+RayTracingDevice::~RayTracingDevice() {
+	for (size_t i = 0; i < frameInFlightCount; ++i) {
+		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
+		vkDestroySemaphore(m_device, m_perFrameData[i].presentReadySemaphore, nullptr);
+		vkDestroySemaphore(m_device, m_perFrameData[i].acquireDoneSemaphore, nullptr);
+		vkDestroyCommandPool(m_device, m_perFrameData[i].pool, nullptr);
+	}
+
+	for (auto& view : m_swapchainViews) {
+		vkDestroyImageView(m_device, view, nullptr);
+	}
+
+	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+	vkDestroyDevice(m_device, nullptr);
+
+	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+
+	vkDestroyDebugUtilsMessengerEXT(m_instance, m_messenger, nullptr);
+
+	vkDestroyInstance(m_instance, nullptr);
+}
+
+void RayTracingDevice::init(bool enableHardwareRaytracing) {
 	VkApplicationInfo info = { .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 							   .pApplicationName = "Vulkan Raytracer",
 							   .applicationVersion = 1,
@@ -134,7 +164,8 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 			VkBool32 surfaceSupport;
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &surfaceSupport);
 
-			if ((properties.queueFlags & VK_QUEUE_COMPUTE_BIT) && (properties.queueFlags & VK_QUEUE_GRAPHICS_BIT) && surfaceSupport) {
+			if ((properties.queueFlags & VK_QUEUE_COMPUTE_BIT) && (properties.queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
+				surfaceSupport) {
 				deviceQueueCreateInfo = { .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
 										  .queueFamilyIndex = static_cast<uint32_t>(i),
 										  .queueCount = 1,
@@ -164,15 +195,14 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 		.pNext = &rayTracingFeatures,
 		.accelerationStructure = VK_TRUE
 	};
-	VkPhysicalDeviceVulkan12Features vulkan12Features = {
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		.pNext = &accelerationStructureFeatures,
-		.descriptorIndexing = VK_TRUE,
-		.shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-		.runtimeDescriptorArray = VK_TRUE,
-		.scalarBlockLayout = VK_TRUE,
-		.bufferDeviceAddress = VK_TRUE
-	};
+	VkPhysicalDeviceVulkan12Features vulkan12Features = { .sType =
+															  VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+														  .pNext = &accelerationStructureFeatures,
+														  .descriptorIndexing = VK_TRUE,
+														  .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+														  .runtimeDescriptorArray = VK_TRUE,
+														  .scalarBlockLayout = VK_TRUE,
+														  .bufferDeviceAddress = VK_TRUE };
 
 	VkPhysicalDeviceFeatures2 features = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
 										   .pNext = enableHardwareRaytracing ? &vulkan12Features : nullptr };
@@ -217,12 +247,9 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 
 	if constexpr (enableDebugUtils) {
 		setObjectName(m_device, VK_OBJECT_TYPE_DEVICE, m_device, "Main device");
-		setObjectName(m_device, VK_OBJECT_TYPE_SURFACE_KHR, m_surface,
-					  "Presentation surface");
-		setObjectName(m_device, VK_OBJECT_TYPE_PHYSICAL_DEVICE, m_physicalDevice,
-					  "Chosen physical device");
-		setObjectName(m_device, VK_OBJECT_TYPE_QUEUE, m_queue,
-					  "Main ray-tracing/compute queue");
+		setObjectName(m_device, VK_OBJECT_TYPE_SURFACE_KHR, m_surface, "Presentation surface");
+		setObjectName(m_device, VK_OBJECT_TYPE_PHYSICAL_DEVICE, m_physicalDevice, "Chosen physical device");
+		setObjectName(m_device, VK_OBJECT_TYPE_QUEUE, m_queue, "Main ray-tracing/compute queue");
 	}
 
 	for (size_t i = 0; i < frameInFlightCount; ++i) {
@@ -236,28 +263,6 @@ RayTracingDevice::RayTracingDevice(size_t windowWidth, size_t windowHeight, bool
 	createSwapchainResources();
 
 	vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &m_memoryProperties);
-}
-
-RayTracingDevice::~RayTracingDevice() {
-	for (size_t i = 0; i < frameInFlightCount; ++i) {
-		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
-		vkDestroySemaphore(m_device, m_perFrameData[i].presentReadySemaphore, nullptr);
-		vkDestroySemaphore(m_device, m_perFrameData[i].acquireDoneSemaphore, nullptr);
-		vkDestroyCommandPool(m_device, m_perFrameData[i].pool, nullptr);
-	}
-
-	for (auto& view : m_swapchainViews) {
-		vkDestroyImageView(m_device, view, nullptr);
-	}
-
-	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-	vkDestroyDevice(m_device, nullptr);
-
-	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-
-	vkDestroyDebugUtilsMessengerEXT(m_instance, m_messenger, nullptr);
-
-	vkDestroyInstance(m_instance, nullptr);
 }
 
 void RayTracingDevice::createPerFrameData(size_t index) {

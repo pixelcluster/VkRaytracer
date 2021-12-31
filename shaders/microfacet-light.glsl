@@ -5,7 +5,7 @@
 #include "rng.glsl"
 
 //equations are from https://hal.inria.fr/hal-01024289/file/Heitz2014Microfacet.pdf
-float beckmannLambdaApprox(float tanTheta) {
+float beckmannLambdaApprox(float tanTheta, float alpha) {
 	if(isnan(tanTheta)) {
 		return 0.0f;
 	}
@@ -20,15 +20,15 @@ float beckmannLambdaApproxRoughness1(float tanTheta) {
 	return (1.0 - 1.259 * a + 0.396 * a * a) / (3.535 * a + 2.181 * a * a);
 }
 
-float smithG1(vec3 wo, float tanTheta) {
+float smithG1(vec3 wo, float tanTheta, float alpha) {
 	if(isinf(tanTheta)) return 0.0f;
-	return 1.0f / (1.0f + beckmannLambdaApprox(tanTheta));
+	return 1.0f / (1.0f + beckmannLambdaApprox(tanTheta, alpha));
 }
 float smithG1Roughness1(vec3 wo, float tanTheta) {
 	return 1.0f / (1.0f + beckmannLambdaApproxRoughness1(tanTheta));
 }
 //from pbrt
-float smithG(vec3 wi, vec3 wo, vec3 normal) {
+float smithG(vec3 wi, vec3 wo, vec3 normal, float alpha) {
 	float cosThetaIn = abs(dot(wi, normal));
 	float sinThetaIn = sqrt(max(1.0f - cosThetaIn * cosThetaIn, 0.0f));
 	float cosThetaOut = abs(dot(wo, normal));
@@ -41,10 +41,10 @@ float smithG(vec3 wi, vec3 wo, vec3 normal) {
 	if(abs(cosThetaOut) < 1.e-5f) {
 		tanThetaOut = 0.0f;
 	}
-	return 1.0f / (1.0f + beckmannLambdaApprox(tanThetaIn) + beckmannLambdaApprox(tanThetaOut));
+	return 1.0f / (1.0f + beckmannLambdaApprox(tanThetaIn, alpha) + beckmannLambdaApprox(tanThetaOut, alpha));
 }
 
-float beckmannD(float cos2Theta, float sin2Theta) {
+float beckmannD(float cos2Theta, float sin2Theta, float alpha) {
 	float tan2Theta = abs(sin2Theta / cos2Theta);
 	if(isinf(tan2Theta) || tan2Theta == 0.0f) return 0.0f;
 	return exp(-tan2Theta / (alpha * alpha)) / (PI * alpha * alpha * cos2Theta * cos2Theta);
@@ -74,7 +74,7 @@ float erfInvApprox(float x) {
 }
 
 //equation from pbrt
-float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
+float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal, float alpha) {
 	float cosThetaI = abs(dot(incidentDir, normal));
 
 	float cosTheta = abs(dot(outgoingDir, normal));
@@ -93,8 +93,8 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float sinThetaNormal2 = max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f);
 
 	float fresnelFactor = fresnel(cosThetaMicrofacet);
-	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);
-	float mask = smithG(outgoingDir, incidentDir, normal);
+	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2, alpha);
+	float mask = smithG(outgoingDir, incidentDir, normal, alpha);
 
 	return (distribution * fresnelFactor * mask) / (4 * cosThetaI * cosTheta);
 }
@@ -103,7 +103,7 @@ float microfacetBSDF(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 //algorithm is in supplemental material at https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fcgf.12417&file=cgf12417-sup-0001-S1.pdf
 //stretching, rotation, unstretching and normal computation is translated directly from C++ implementation
 //
-vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint randomState) {
+vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, float alpha, inout uint randomState) {
 	float U1 = nextRand(randomState) * uintBitsToFloat(0x2f800004U);
 	float U2 = nextRand(randomState) * uintBitsToFloat(0x2f800004U);
 
@@ -175,7 +175,7 @@ vec3 sampleMicrofacetDistribution(vec3 incidentDir, vec3 normal, inout uint rand
 }
 
 //from pbrt
-float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
+float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal, float alpha) {
 	vec3 microfacetNormal = (outgoingDir + incidentDir);
 	if(dot(microfacetNormal, microfacetNormal) < 1.e-5) return 0.0f;
 	microfacetNormal = normalize(microfacetNormal);
@@ -189,13 +189,13 @@ float pdfMicrofacet(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosThetaNormal = abs(dot(microfacetNormal, normal));
 	float sinThetaNormal2 = max(1.0f - cosThetaNormal * cosThetaNormal, 0.0f);
 	
-	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2);
-	float mask = smithG1(outgoingDir, sinTheta / cosTheta);
+	float distribution = beckmannD(cosThetaNormal * cosThetaNormal, sinThetaNormal2, alpha);
+	float mask = smithG1(outgoingDir, sinTheta / cosTheta, alpha);
 
 	return distribution * mask * max(dot(outgoingDir, microfacetNormal), 0.0f) / (abs(dot(outgoingDir, normal)) * 4 * dot(outgoingDir, microfacetNormal));
 }
 
-float microfacetWeight(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
+float microfacetWeight(vec3 incidentDir, vec3 outgoingDir, vec3 normal, float alpha) {
 	vec3 microfacetNormal = (outgoingDir + incidentDir);
 	if(dot(microfacetNormal, microfacetNormal) < 1.e-5) return 0.0f;
 	microfacetNormal = normalize(microfacetNormal);
@@ -206,7 +206,7 @@ float microfacetWeight(vec3 incidentDir, vec3 outgoingDir, vec3 normal) {
 	float cosTheta = abs(dot(incidentDir, microfacetNormal));
 	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
 
-	return smithG(incidentDir, outgoingDir, normal) / smithG1(incidentDir, sinTheta / cosTheta);
+	return smithG(incidentDir, outgoingDir, normal, alpha) / smithG1(incidentDir, sinTheta / cosTheta, alpha);
 }
 
 #endif

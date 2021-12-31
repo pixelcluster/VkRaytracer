@@ -7,8 +7,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 const float eta_i = 1.0f;
-const float eta_t = 1.89f;
-const float alpha = 0.6f;
+const float eta_t = 1.5f;
 
 #define USE_FRESNEL
 #define USE_WEIGHTING
@@ -54,7 +53,13 @@ layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 hitAttributeEXT vec2 baryCoord;
 
-vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
+float roughnessToAlpha(float roughness) {
+	roughness = max(roughness, 1e-3);
+	float x = log(roughness);
+	return 1.62142f + 0.819955f * x + 0.1734f * x * x + 0.0171201f * x * x * x + 0.000640711f * x * x * x * x;
+}
+
+vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal, float alpha) {
 	vec3 sampleRadiance = vec3(0.0f);
 	vec3 sampleDir;
 
@@ -74,26 +79,26 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal) {
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 	
 	if(lightIndex == lights.length()) {
-		sampleRadiance += weightLightEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);
+		sampleRadiance += weightLightEnvmap(alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
 	}
 	else {
 		LightData lightData = LightData(vec4(0.0f), vec4(0.0f));
 		lightData = lights[lightIndex];
-		sampleRadiance += weightLight(lightData, hitPoint, sampleDir, objectHitNormal, payload.color);
+		sampleRadiance += weightLight(lightData, alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
 	}
 
 	//Sample BSDF
 		
 	lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
-	sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState));
+	sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, alpha, payload.randomState));
 			
 	payload.isLightSample = true;
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 			
 	if(lightIndex == lights.length())
-		sampleRadiance += weightBSDFEnvmap(hitPoint, sampleDir, objectHitNormal, payload.color);
+		sampleRadiance += weightBSDFEnvmap(alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
 	else
-		sampleRadiance += weightBSDFLight(lights[lightIndex], hitPoint, sampleDir, objectHitNormal, payload.color);
+		sampleRadiance += weightBSDFLight(lights[lightIndex], alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
 
 	return sampleRadiance * (lights.length() + 1.0f);
 }
@@ -139,6 +144,7 @@ void main() {
 	Material material = materials[data.materialIndex];
 
 	uint albedoTexIndex = material.albedoAndMetallicRoughnessTextureIndex & 0xFFFF;
+	uint metalRoughTexIndex = material.albedoAndMetallicRoughnessTextureIndex >> 16;
 	uint normalTexIndex = material.normalAndEmissiveTextureIndex >> 16;
 	uint emissiveTexIndex = material.normalAndEmissiveTextureIndex & 0xFFFF;
 
@@ -159,16 +165,22 @@ void main() {
 	if(emissiveTexIndex != 65535)
 		incomingRadiance += texture(textures[nonuniformEXT(emissiveTexIndex)], texCoords).rgb * material.emissiveFactor.rgb;
 
-	incomingRadiance += payload.rayThroughput * sampleLight(hitPoint, objectHitNormal);
+	float roughness = material.roughnessFactor;
+	if(metalRoughTexIndex != 65535)
+		roughness *= texture(textures[nonuniformEXT(metalRoughTexIndex)], texCoords).b;
+
+	float alpha = roughnessToAlpha(roughness);
+
+	incomingRadiance += payload.rayThroughput * sampleLight(hitPoint, objectHitNormal, alpha);
 
 	payload.isLightSample = false;
 	
 	if(payload.recursionDepth++ < 7) {
 		uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
 
-		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, payload.randomState));
+		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, alpha, payload.randomState));
 
-		payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal);
+		payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal, alpha);
 
 		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
 
