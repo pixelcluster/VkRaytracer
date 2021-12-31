@@ -351,7 +351,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 											 { 0.0f, 2 * sphere.radius, 0.0f, sphere.position[1] },
 											 { 0.0f, 0.0f, 2 * sphere.radius, sphere.position[2] } } },
 				  .instanceCustomIndex = 0U,
-				  .mask = 0xFF,
+				  .mask = 0x01, //culled in ray gen
 				  .instanceShaderBindingTableRecordOffset = lightSphereSBTIndex,
 				  .accelerationStructureReference =
 					  compactedSphereAccelerationStructureData.accelerationStructureDeviceAddress });

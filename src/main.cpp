@@ -19,7 +19,8 @@ int main(int argc, const char** argv) {
 	}
 
 	std::vector<Sphere> spheres = {
-		{ .position = { 0.0f, -4.0f, 0.0f }, .radius = 0.5f, .color = { 0.4f, 0.3f, 0.6f, 500.0f } }
+		{ .position = { -8.3395f, -0.76978f, -2.3374f, }, .radius = 0.5f, .color = { 0.8f, 0.6f, 0.6f, 500.0f } },
+		{ .position = { 8.9656f, -0.76978f, -2.3374f }, .radius = 0.5f, .color = { 0.4f, 0.3f, 0.6f, 500.0f } }
 	};
 
 	MemoryAllocator allocator = MemoryAllocator(device);

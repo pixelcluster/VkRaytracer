@@ -56,6 +56,4 @@ void main() {
 
 	if(texture(textures[nonuniformEXT(albedoTexIndex)], interpolatedTexCoords).a < material.alphaCutoff)
 		ignoreIntersectionEXT;
-	else
-		terminateRayEXT;
 }
