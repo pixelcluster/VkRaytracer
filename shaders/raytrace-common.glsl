@@ -82,7 +82,7 @@ vec3 weightBSDFLight(LightData lightData, float alpha, vec3 hitPoint, vec3 sampl
 
 	float lightPdf = pdfSphere(hitPoint, sampleDir, lightData);
 	//todo: NEE should discard the ray even if a different light than the chosen one was hit
-	radiance.a = max(radiance.a, 0.0f); //zero radiance if ray didn't hit light
+	radiance.a = max(1.0f - max(radiance.a, 0.0f), 0.0f); //zero radiance if ray didn't hit light
 
 	if(lightPdf > 0.0f && bsdfPdf > 0.000005f)
 		return microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal, alpha) * (radiance.rgb * radiance.a) * powerHeuristic(1, bsdfPdf, 1, lightPdf);

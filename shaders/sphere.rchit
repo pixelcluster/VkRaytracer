@@ -16,5 +16,5 @@ layout(scalar, set = 1, binding = 8) buffer LightBuffer {
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 void main() {
-	payload.color = vec4(lights[gl_InstanceID].color.rgb * lights[gl_InstanceID].color.a, 0.0f);
+	payload.color = vec4(lights[gl_InstanceID].color.rgb * lights[gl_InstanceID].color.a * payload.rayThroughput, 0.0f);
 }

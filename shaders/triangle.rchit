@@ -62,7 +62,7 @@ float roughnessToAlpha(float roughness) {
 vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal, float alpha) {
 	vec3 sampleRadiance = vec3(0.0f);
 	vec3 sampleDir;
-
+	
 	//Sample light
 	uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
 	//lightIndex == lights.length(): sample sky envmap
@@ -80,13 +80,13 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal, float alpha) {
 	
 	if(lightIndex == lights.length()) {
 		sampleRadiance += weightLightEnvmap(alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
-	}
+}
 	else {
 		LightData lightData = LightData(vec4(0.0f), vec4(0.0f));
 		lightData = lights[lightIndex];
 		sampleRadiance += weightLight(lightData, alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
 	}
-
+	
 	//Sample BSDF
 		
 	lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
@@ -99,7 +99,7 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal, float alpha) {
 		sampleRadiance += weightBSDFEnvmap(alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
 	else
 		sampleRadiance += weightBSDFLight(lights[lightIndex], alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
-
+		
 	return sampleRadiance * (lights.length() + 1.0f);
 }
 
@@ -171,21 +171,18 @@ void main() {
 
 	float alpha = roughnessToAlpha(roughness);
 
-	incomingRadiance += payload.rayThroughput * sampleLight(hitPoint, objectHitNormal, alpha);
+	incomingRadiance += sampleLight(hitPoint, objectHitNormal, alpha);
 
 	payload.isLightSample = false;
 	
 	if(payload.recursionDepth++ < 7) {
-		uint lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
-
 		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, alpha, payload.randomState));
 
 		payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal, alpha);
 
-		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * sampleDir, 0, sampleDir, 999999999.0f, 0);
+		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 
 		incomingRadiance += payload.color.rgb * max(payload.color.a, 0.0f);
 	}
-	//incomingRadiance = sampleDir;
 	payload.color = vec4(incomingRadiance * instanceColor, 1.0f);
 }

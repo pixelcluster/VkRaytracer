@@ -124,6 +124,14 @@ TriangleMeshRaytracer::TriangleMeshRaytracer(RayTracingDevice& device, MemoryAll
 	vkUpdateDescriptorSets(m_device.device(), writeCount, setWrites, 0, nullptr);
 
 	recreateAccumulationImage();
+
+	std::memcpy(m_worldPos, loader.camera().position, 3 * sizeof(float));
+	std::memcpy(m_worldDirection, loader.camera().direction, 3 * sizeof(float));
+	std::memcpy(m_worldRight, loader.camera().right, 3 * sizeof(float));
+
+	m_worldPos[1] *= -1.0f;
+	m_worldDirection[1] *= -1.0f;
+	m_worldRight[1] *= -1.0f;
 }
 
 TriangleMeshRaytracer::~TriangleMeshRaytracer() {
@@ -163,16 +171,16 @@ bool TriangleMeshRaytracer::update() {
 			m_cameraPhi += 2 * std::numbers::pi;
 		}
 
+		m_worldDirection[0] = cos(m_cameraTheta) * sin(m_cameraPhi);
+		m_worldDirection[1] = sin(m_cameraTheta);
+		m_worldDirection[2] = cos(m_cameraTheta) * cos(m_cameraPhi);
+
+		m_worldRight[0] = sin(m_cameraPhi - std::numbers::pi * 0.5);
+		m_worldRight[1] = 0.0f;
+		m_worldRight[2] = cos(m_cameraPhi - std::numbers::pi * 0.5);
+
 		resetSampleCount();
 	}
-
-	m_worldDirection[0] = cos(m_cameraTheta) * sin(m_cameraPhi);
-	m_worldDirection[1] = sin(m_cameraTheta);
-	m_worldDirection[2] = cos(m_cameraTheta) * cos(m_cameraPhi);
-
-	m_worldRight[0] = sin(m_cameraPhi - std::numbers::pi * 0.5);
-	m_worldRight[1] = 0.0f;
-	m_worldRight[2] = cos(m_cameraPhi - std::numbers::pi * 0.5);
 
 	float worldUp[3];
 	worldUp[0] = m_worldDirection[1] * m_worldRight[2] - m_worldDirection[2] * m_worldRight[1];
@@ -216,10 +224,12 @@ bool TriangleMeshRaytracer::update() {
 		resetSampleCount();
 	}
 
-	if (m_accumulatedSampleCount < m_maxSamples)
+	if (m_accumulatedSampleCount < m_maxSamples) {
 		++m_accumulatedSampleCount;
+		m_accumulatedSampleTime += deltaTime;
+	}
 	else if (m_accumulatedSampleCount != -1U) {
-		printf("Max. sample count reached.\n");
+		printf("Max. sample count reached. Time=%f s\n", m_accumulatedSampleTime);
 		m_accumulatedSampleCount = -1U;
 	}
 
@@ -283,7 +293,7 @@ bool TriangleMeshRaytracer::update() {
 
 	vkCmdBindPipeline(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_pipelineBuilder.pipeline());
 
-	PushConstantData data = { .worldOffset = { m_worldPos[0], m_worldPos[1], m_worldPos[2]},
+	PushConstantData data = { .worldOffset = { m_worldPos[0], m_worldPos[1], m_worldPos[2] },
 							  .worldDirection = { m_worldDirection[0], m_worldDirection[1], m_worldDirection[2] },
 							  .worldRight = { m_worldRight[0], m_worldRight[1], m_worldRight[2] },
 							  .worldUp = { worldUp[0], -worldUp[1], worldUp[2] },
@@ -365,4 +375,7 @@ void TriangleMeshRaytracer::recreateAccumulationImage() {
 	verifyResult(vkCreateImageView(m_device.device(), &imageViewCreateInfo, nullptr, &m_accumulationImageView));
 }
 
-void TriangleMeshRaytracer::resetSampleCount() { m_accumulatedSampleCount = 0; }
+void TriangleMeshRaytracer::resetSampleCount() {
+	m_accumulatedSampleCount = 0;
+	m_accumulatedSampleTime = 0.0;
+}

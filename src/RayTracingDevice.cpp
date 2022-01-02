@@ -217,8 +217,8 @@ void RayTracingDevice::init(bool enableHardwareRaytracing) {
 		deviceExtensionNames.reserve(1);
 	}
 	deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-	/* deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
-	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);*/
+	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
+	deviceExtensionNames.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
 
 	VkDeviceDiagnosticsConfigFlagsNV aftermathFlags =
 		VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_RESOURCE_TRACKING_BIT_NV |	   // Enable tracking of resources.
@@ -231,7 +231,7 @@ void RayTracingDevice::init(bool enableHardwareRaytracing) {
 	aftermathInfo.flags = aftermathFlags;
 
 	VkDeviceCreateInfo deviceCreateInfo = { .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-											.pNext = &features,
+											.pNext = &aftermathInfo,
 											.queueCreateInfoCount = 1,
 											.pQueueCreateInfos = &deviceQueueCreateInfo,
 											.enabledLayerCount = static_cast<uint32_t>(instanceLayerNames.size()),

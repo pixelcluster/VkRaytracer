@@ -23,7 +23,7 @@ vec3 sampleHemisphereUniform(vec3 normal, inout uint randomState) {
 									surfaceTangent1.z, normal.z, -surfaceTangent2.z);
 
 	float m = sqrt(max(1.0f - U1 * U1, 0.0f));
-	return (vec3(cos(2 * PI * U2) * m, U1, -sin(2 * PI * U2) * m) * shadingSpaceToWorld);
+	return normalize(vec3(cos(2 * PI * U2) * m, U1, -sin(2 * PI * U2) * m) * shadingSpaceToWorld);
 }
 
 //from pbrt

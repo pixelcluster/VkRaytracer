@@ -70,17 +70,21 @@ void rotate_quat(float vec[3], const float quat[4]) {
 	float qscal = quat[3];
 
 	float vec_tmp[3] = { vec[0], vec[1], vec[2] };
-	float vec_quat_cross[3] = { vec[0], vec[1], vec[2] };
-	cross_vec3(vec_quat_cross, qvec);
 
-	vec_mul(qvec, 2.0f * dot_vec3(qvec, vec_tmp));
-	vec_mul(vec_tmp, qscal * qscal - qvec_length2);
-	vec_mul(vec_quat_cross, 2.0f * qscal);
+	float factor1[3] = { qvec[0], qvec[1], qvec[2] };
+	float factor2[3] = { vec[0], vec[1], vec[2] };
 
-	vec_add(vec_tmp, qvec);
-	vec_add(vec_tmp, vec_quat_cross);
+	float factor3[3] = { qvec[0], qvec[1], qvec[2] };
+	cross_vec3(factor3, vec);
 
-	std::memcpy(vec, vec_tmp, 3 * sizeof(float));
+	vec_mul(factor1, 2.0f * dot_vec3(qvec, vec_tmp));
+	vec_mul(factor2, qscal * qscal - qvec_length2);
+	vec_mul(factor3, 2.0f * qscal);
+
+	vec_add(factor1, factor2);
+	vec_add(factor1, factor3);
+
+	std::memcpy(vec, factor1, 3 * sizeof(float));
 }
 
 void checkCGLTFResult(cgltf_result result, const std::string_view& gltfFilename) {
@@ -597,30 +601,34 @@ void ModelLoader::addScene(cgltf_data* data, cgltf_scene* scene) {
 
 void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[3], float rotation[4], float scale[3]) {
 	// local -> global transform
-	float localTranslation[3] = {};
-	float localRotation[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-	float localScale[3] = { 1.0f, 1.0f, 1.0f };
+	float localTranslation[3];
+	float localRotation[4];
+	float localScale[3];
+
+	std::memcpy(localTranslation, translation, 3 * sizeof(float));
+	std::memcpy(localRotation, rotation, 4 * sizeof(float));
+	std::memcpy(localScale, scale, 3 * sizeof(float));
 	// resolve child transforms and make global
 	if (node->has_translation) {
 		for (size_t i = 0; i < 3; ++i) {
-			localTranslation[i] = translation[i] + node->translation[i];
+			localTranslation[i] += node->translation[i];
 		}
 	}
 	if (node->has_rotation) {
 		// multiply quaternions
 		// https://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/arithmetic/index.htm
-		localRotation[0] = rotation[0] * node->rotation[0] + rotation[1] * node->rotation[1] +
-						   rotation[2] * node->rotation[2] + rotation[3] * node->rotation[3];
-		localRotation[1] = rotation[1] * node->rotation[0] + rotation[0] * node->rotation[1] +
-						   rotation[2] * node->rotation[3] + rotation[3] * node->rotation[2];
-		localRotation[2] = rotation[0] * node->rotation[2] + rotation[1] * node->rotation[3] +
-						   rotation[2] * node->rotation[0] + rotation[3] * node->rotation[1];
-		localRotation[3] = rotation[0] * node->rotation[3] + rotation[1] * node->rotation[2] +
-						   rotation[2] * node->rotation[1] + rotation[3] * node->rotation[0];
+		localRotation[0] = rotation[3] * node->rotation[0] + rotation[1] * node->rotation[2] +
+						   rotation[2] * node->rotation[1] + rotation[0] * node->rotation[3];
+		localRotation[1] = rotation[1] * node->rotation[3] + rotation[3] * node->rotation[1] +
+						   rotation[2] * node->rotation[0] + rotation[0] * node->rotation[2];
+		localRotation[2] = rotation[3] * node->rotation[2] + rotation[1] * node->rotation[0] +
+						   rotation[2] * node->rotation[3] + rotation[0] * node->rotation[1];
+		localRotation[3] = rotation[3] * node->rotation[3] + rotation[1] * node->rotation[1] +
+						   rotation[2] * node->rotation[2] + rotation[0] * node->rotation[0];
 	}
 	if (node->has_scale) {
 		for (size_t i = 0; i < 3; ++i) {
-			localScale[i] = scale[i] * node->scale[i];
+			localScale[i] *= node->scale[i];
 		}
 	}
 
@@ -628,16 +636,16 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	//https://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToMatrix/index.htm
 	//assumed column-major matrix layout
 	float quatRotationMatrix[16] = {
-		 localRotation[3],  localRotation[2], -localRotation[1], localRotation[0],
-		-localRotation[2],  localRotation[3],  localRotation[0], localRotation[1],
-		 localRotation[1], -localRotation[0],  localRotation[3], localRotation[2],
-		-localRotation[0], -localRotation[1], -localRotation[2], localRotation[3],
-	};
-	float quatRotationMatrixFactor[16] = {
 		 localRotation[3],  localRotation[2], -localRotation[1], -localRotation[0],
 		-localRotation[2],  localRotation[3],  localRotation[0], -localRotation[1],
 		 localRotation[1], -localRotation[0],  localRotation[3], -localRotation[2],
 		 localRotation[0],  localRotation[1],  localRotation[2],  localRotation[3],
+	};
+	float quatRotationMatrixFactor[16] = {
+		 localRotation[3],  localRotation[2], -localRotation[1], localRotation[0],
+		-localRotation[2],  localRotation[3],  localRotation[0], localRotation[1],
+		 localRotation[1], -localRotation[0],  localRotation[3], localRotation[2],
+		-localRotation[0], -localRotation[1], -localRotation[2], localRotation[3],
 	};
 
 	float transformMatrix[16] = { //only translation at first, becomes transform matrix through matrix multiplications
@@ -660,17 +668,28 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 
 	multiply_mat4(quatRotationMatrix, quatRotationMatrixFactor);
 	multiply_mat4(quatRotationMatrix, scaleMatrix);
-	multiply_mat4(transformMatrix, quatRotationMatrix);
+	multiply_mat4(quatRotationMatrix, transformMatrix);
+
+	std::memcpy(transformMatrix, quatRotationMatrix, 16 * sizeof(float));
 
 	multiply_mat4(noRotationTransformMatrix, scaleMatrix);
 
 	if (node->camera && node->camera->type == cgltf_camera_type_perspective) {
-		float baseDirection[3] = { 0.0f, 0.0f, -1.0f };
+		float baseDirection[3] = { 0.0f, 0.0f, 1.0f };
 		rotate_quat(baseDirection, localRotation);
+		std::swap(baseDirection[0], baseDirection[1]);
+
+		float baseRight[3] = { 0.0f, -1.0f, 0.0f };
+		rotate_quat(baseRight, localRotation);
+		std::swap(baseRight[0], baseRight[1]);
+
 		m_camera = { .fov = node->camera->data.perspective.yfov, .znear = node->camera->data.perspective.znear };
 
 		std::memcpy(m_camera.direction, baseDirection, 3 * sizeof(float));
+		std::memcpy(m_camera.right, baseRight, 3 * sizeof(float));
 		std::memcpy(m_camera.position, localTranslation, 3 * sizeof(float));
+
+		m_camera.position[2] = -m_camera.position[2];
 
 		if (node->camera->data.perspective.has_zfar) {
 			m_camera.zfar = node->camera->data.perspective.zfar;

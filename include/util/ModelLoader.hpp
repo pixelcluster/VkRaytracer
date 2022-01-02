@@ -99,8 +99,9 @@ struct ImageData {
 };
 
 struct Camera {
-	float position[3];
-	float direction[3];
+	float position[3] = { 2.0f, 2.0f, 0.0f };
+	float direction[3] = { 1.0f, 0.0f, 0.0f };
+	float right[3] = { 0.0f, 0.0f, 1.0f };
 	float fov;
 	float znear;
 	float zfar = 10000.0f;

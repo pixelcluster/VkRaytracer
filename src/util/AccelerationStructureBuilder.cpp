@@ -3,7 +3,7 @@
 
 // assign geometry to whichever AS it intersects with the most, undef this in order to assign geometries to ASes based
 // on whichever generates less intersection area between all AABBS (is O(n^2) instead of O(n) with n=number of ASes
-//#define AS_HEURISTIC_GEOMETRY_INTERSECTION
+#define AS_HEURISTIC_GEOMETRY_INTERSECTION
 
 // cube root of this number should be an integer because the model AABB is subdivided into equally-sized cubes (3
 // dimensions)

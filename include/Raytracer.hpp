@@ -27,9 +27,9 @@ class TriangleMeshRaytracer {
 	VkExtent3D m_accumulationImageExtent;
 	ImageAllocation m_accumulationImageAllocation = {};
 
-	float m_worldPos[3] = { 2.0f, -2.0f, 0.0f };
-	float m_worldDirection[3] = { 1.0f, 0.0f, 0.0f };
-	float m_worldRight[3] = { 0.0f, 0.0f, 1.0f };
+	float m_worldPos[3];
+	float m_worldDirection[3];
+	float m_worldRight[3];
 
 	float m_cameraPhi = 0.0f;
 	float m_cameraTheta = std::numbers::pi;
@@ -37,4 +37,6 @@ class TriangleMeshRaytracer {
 	double m_lastTime = 0.0f;
 	uint32_t m_accumulatedSampleCount = 0;
 	uint32_t m_maxSamples = 1024;
+
+	double m_accumulatedSampleTime = 0.0f;
 };
