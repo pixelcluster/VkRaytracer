@@ -2,6 +2,10 @@
 
 A hardware-accelerated path tracer for glTF files using Vulkan.
 
+## Screenshot
+
+![](/screenshots/sponza.png)
+
 ## Installation
 
 ```
@@ -21,7 +25,3 @@ There are restrictions about which glTF files can be opened.
 - All materials must have a base color texture.
 
 Many models from https://github.com/KhronosGroup/glTF-Sample-Models/, such as the Sponza, Damaged Helmet, and Lantern, fulfill these restrictions.
-
-## Screenshot
-
-screenshots/sponza.png
