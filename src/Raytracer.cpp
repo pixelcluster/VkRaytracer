@@ -1,5 +1,7 @@
 #include <Raytracer.hpp>
 #include <numbers>
+#include <cstring>
+#include <cmath>
 
 TriangleMeshRaytracer::TriangleMeshRaytracer(RayTracingDevice& device, MemoryAllocator& allocator, ModelLoader& loader,
 											 PipelineBuilder& pipelineBuilder,

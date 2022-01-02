@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <stb_image.h>
 #include <util/ModelLoader.hpp>
+#include <cstring>
 
 void multiply_mat4(float mat1[16], const float mat2[16]) {
 	float tmp[16];

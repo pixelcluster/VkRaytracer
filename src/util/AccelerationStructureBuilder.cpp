@@ -1,5 +1,7 @@
 #include <DebugHelper.hpp>
 #include <util/AccelerationStructureBuilder.hpp>
+#include <cstring>
+#include <cmath>
 
 // assign geometry to whichever AS it intersects with the most, undef this in order to assign geometries to ASes based
 // on whichever generates less intersection area between all AABBS (is O(n^2) instead of O(n) with n=number of ASes

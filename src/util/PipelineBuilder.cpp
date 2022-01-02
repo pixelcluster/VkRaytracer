@@ -2,6 +2,7 @@
 #include <util/PipelineBuilder.hpp>
 #include <volk.h>
 #include <filesystem>
+#include <cstring>
 
 #ifdef _WIN32
 #include <Windows.h>
