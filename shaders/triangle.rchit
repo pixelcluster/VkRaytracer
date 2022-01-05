@@ -179,6 +179,15 @@ void main() {
 		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, alpha, payload.randomState));
 
 		payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal, alpha);
+		
+		float russianRouletteWeight = 1.0f - max(payload.rayThroughput, 0.995); //see pbrt
+		if(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) < russianRouletteWeight) {
+			payload.color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+			return;
+		}
+		else {
+			payload.rayThroughput /= russianRouletteWeight;
+		}
 
 		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 
