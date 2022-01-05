@@ -267,7 +267,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 														 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
 																  VK_BUFFER_USAGE_TRANSFER_DST_BIT };
 	verifyResult(vkCreateBuffer(m_device.device(), &geometryIndexBufferCreateInfo, nullptr, &m_geometryIndexBuffer));
-	geometryIndexBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	geometryIndexBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 	VkBuffer geometryIndexStagingBuffer;
 	verifyResult(vkCreateBuffer(m_device.device(), &geometryIndexBufferCreateInfo, nullptr, &geometryIndexStagingBuffer));
 
