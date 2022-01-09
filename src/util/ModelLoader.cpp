@@ -295,7 +295,11 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	m_allocator.bindDeviceBuffer(m_materialBuffer, 0);
 	m_allocator.bindDeviceBuffer(m_geometryBuffer, 0);
 
-	stagingBufferCreateInfo.size = m_combinedImageSize;
+	if (m_combinedImageSize > 4_GiB) {
+		stagingBufferCreateInfo.size = m_maxImageSize;
+	} else {
+		stagingBufferCreateInfo.size = m_combinedImageSize;
+	}
 	verifyResult(vkCreateBuffer(m_device.device(), &stagingBufferCreateInfo, nullptr, &m_imageStagingBuffer));
 	void* imageStagingBufferData = m_allocator.bindStagingBuffer(m_imageStagingBuffer, 0);
 
@@ -444,6 +448,18 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	while (!blitImages.empty()) {
 		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
 							 &transferBarrier, 0, nullptr, 0, nullptr);
+
+		for (size_t i = 0; i < blitImages.size(); ++i) {
+			if (std::min(blitImages[i].width, blitImages[i].height) == 0) {
+				printf("Detected mip level with size 0, ..somehow? minIndex = %ull\n", mipIndex);
+				blitImages.erase(blitImages.begin() + i);
+				--i;
+			} else if (std::min(blitImages[i].width, blitImages[i].height) < 4) {
+				blitImages.erase(blitImages.begin() + i);
+				--i;
+			}
+		}
+
 		for (auto& image : blitImages) {
 			int32_t mipHeight = image.height / 2;
 			int32_t mipWidth = image.width / 2;
@@ -465,17 +481,6 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 						   &blit, VK_FILTER_LINEAR);
 			image.height = mipHeight;
 			image.width = mipWidth;
-		}
-
-		for (size_t i = 0; i < blitImages.size(); ++i) {
-			if (std::min(blitImages[i].width, blitImages[i].height) == 0) {
-				printf("Detected mip level with size 0, ..somehow? minIndex = %ull\n", mipIndex);
-				blitImages.erase(blitImages.begin() + i);
-				--i;
-			} else if (std::min(blitImages[i].width, blitImages[i].height) < 4) {
-				blitImages.erase(blitImages.begin() + i);
-				--i;
-			}
 		}
 		++mipIndex;
 	}
@@ -637,16 +642,16 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	//https://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToMatrix/index.htm
 	//assumed column-major matrix layout
 	float quatRotationMatrix[16] = {
-		 localRotation[3],  localRotation[2], -localRotation[1], -localRotation[0],
-		-localRotation[2],  localRotation[3],  localRotation[0], -localRotation[1],
-		 localRotation[1], -localRotation[0],  localRotation[3], -localRotation[2],
-		 localRotation[0],  localRotation[1],  localRotation[2],  localRotation[3],
-	};
-	float quatRotationMatrixFactor[16] = {
 		 localRotation[3],  localRotation[2], -localRotation[1], localRotation[0],
 		-localRotation[2],  localRotation[3],  localRotation[0], localRotation[1],
 		 localRotation[1], -localRotation[0],  localRotation[3], localRotation[2],
 		-localRotation[0], -localRotation[1], -localRotation[2], localRotation[3],
+	};
+	float quatRotationMatrixFactor[16] = {
+		 localRotation[3],  localRotation[2], -localRotation[1], -localRotation[0],
+		-localRotation[2],  localRotation[3],  localRotation[0], -localRotation[1],
+		 localRotation[1], -localRotation[0],  localRotation[3], -localRotation[2],
+		 localRotation[0],  localRotation[1],  localRotation[2],  localRotation[3],
 	};
 
 	float transformMatrix[16] = { //only translation at first, becomes transform matrix through matrix multiplications
@@ -669,7 +674,7 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 
 	multiply_mat4(quatRotationMatrix, quatRotationMatrixFactor);
 	multiply_mat4(quatRotationMatrix, scaleMatrix);
-	multiply_mat4(quatRotationMatrix, transformMatrix);
+	multiply_mat4(transformMatrix, quatRotationMatrix);
 
 	std::memcpy(transformMatrix, quatRotationMatrix, 16 * sizeof(float));
 
@@ -932,8 +937,7 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].tangentOffset / (sizeof(float) * 4)),
 				  .indexOffset =
 					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].indexOffset / sizeof(uint32_t)),
-				  .materialIndex = static_cast<uint32_t>(m_geometries[currentGeometryIndex].materialIndex +
-														 m_globalMaterialIndexOffset) });
+				  .materialIndex = static_cast<uint32_t>(m_geometries[currentGeometryIndex].materialIndex) });
 			++currentGeometryIndex;
 		}
 	}
@@ -1028,7 +1032,7 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 		imageData.size = imageData.width * imageData.height * 4;
 	}
 	m_combinedImageSize += imageData.size;
-	m_maxImageSize = std::max(m_maxImageSize, m_imageData.size());
+	m_maxImageSize = std::max(m_maxImageSize, imageData.size);
 	m_imageData.push_back(imageData);
 
 	VkImageCreateInfo imageCreateInfo = {

@@ -36,7 +36,7 @@ class TriangleMeshRaytracer {
 
 	double m_lastTime = 0.0f;
 	uint32_t m_accumulatedSampleCount = 0;
-	uint32_t m_maxSamples = 1024;
+	uint32_t m_maxSamples = 8192;
 
 	double m_accumulatedSampleTime = 0.0f;
 };

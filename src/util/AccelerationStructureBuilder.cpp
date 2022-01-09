@@ -551,7 +551,7 @@ size_t AccelerationStructureBuilder::bestAccelerationStructureIndex(std::vector<
 #ifdef AS_HEURISTIC_GEOMETRY_INTERSECTION
 		float intersectionArea = geometryBoundingBox.intersectionArea(asBoundingBoxes[i]);
 
-		if (intersectionArea > chosenIntersectionArea) {
+		if (intersectionArea >= chosenIntersectionArea) {
 			chosenIndex = i;
 			chosenIntersectionArea = intersectionArea;
 		}
