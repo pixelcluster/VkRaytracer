@@ -27,20 +27,26 @@ float dot_vec3(const float vec1[3], const float vec2[3]) {
 // multiply 4x4 matrix with vec(x, y, z, 1)
 void multiply_mat4_vec3_w1(float vec[3], const float mat[16]) {
 	float tmp[3];
-	tmp[0] = dot_vec3(vec, mat);
-	tmp[1] = dot_vec3(vec, mat + 4);
-	tmp[2] = dot_vec3(vec, mat + 8);
-	tmp[0] += mat[3];
-	tmp[0] += mat[7];
-	tmp[0] += mat[11];
+	float mat_row1[3] = { mat[0], mat[4], mat[8] };
+	float mat_row2[3] = { mat[1], mat[5], mat[9] };
+	float mat_row3[3] = { mat[2], mat[6], mat[10] };
+	tmp[0] = dot_vec3(vec, mat_row1);
+	tmp[1] = dot_vec3(vec, mat_row2);
+	tmp[2] = dot_vec3(vec, mat_row3);
+	tmp[0] += mat[12];
+	tmp[1] += mat[13];
+	tmp[2] += mat[14];
 	std::memcpy(vec, tmp, 3 * sizeof(float));
 }
 
 void multiply_mat4_vec3_w0(float vec[3], const float mat[16]) {
 	float tmp[3];
-	tmp[0] = dot_vec3(vec, mat);
-	tmp[1] = dot_vec3(vec, mat + 4);
-	tmp[2] = dot_vec3(vec, mat + 8);
+	float mat_row1[3] = { mat[0], mat[4], mat[8] };
+	float mat_row2[3] = { mat[1], mat[5], mat[9] };
+	float mat_row3[3] = { mat[2], mat[6], mat[10] };
+	tmp[0] = dot_vec3(vec, mat_row1);
+	tmp[1] = dot_vec3(vec, mat_row2);
+	tmp[2] = dot_vec3(vec, mat_row3);
 	std::memcpy(vec, tmp, 3 * sizeof(float));
 }
 
@@ -615,6 +621,11 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	std::memcpy(localRotation, rotation, 4 * sizeof(float));
 	std::memcpy(localScale, scale, 3 * sizeof(float));
 	// resolve child transforms and make global
+	if (node->has_scale) {
+		for (size_t i = 0; i < 3; ++i) {
+			localScale[i] *= node->scale[i];
+		}
+	}
 	if (node->has_translation) {
 		for (size_t i = 0; i < 3; ++i) {
 			localTranslation[i] += node->translation[i];
@@ -631,11 +642,6 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 						   rotation[2] * node->rotation[3] + rotation[0] * node->rotation[1];
 		localRotation[3] = rotation[3] * node->rotation[3] + rotation[1] * node->rotation[1] +
 						   rotation[2] * node->rotation[2] + rotation[0] * node->rotation[0];
-	}
-	if (node->has_scale) {
-		for (size_t i = 0; i < 3; ++i) {
-			localScale[i] *= node->scale[i];
-		}
 	}
 
 	// clang-format off
@@ -673,21 +679,17 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	std::memcpy(noRotationTransformMatrix, transformMatrix, 16 * sizeof(float));
 
 	multiply_mat4(quatRotationMatrix, quatRotationMatrixFactor);
-	multiply_mat4(quatRotationMatrix, scaleMatrix);
 	multiply_mat4(transformMatrix, quatRotationMatrix);
-
-	std::memcpy(transformMatrix, quatRotationMatrix, 16 * sizeof(float));
+	multiply_mat4(transformMatrix, scaleMatrix);
 
 	multiply_mat4(noRotationTransformMatrix, scaleMatrix);
 
 	if (node->camera && node->camera->type == cgltf_camera_type_perspective) {
-		float baseDirection[3] = { 0.0f, 0.0f, 1.0f };
-		rotate_quat(baseDirection, localRotation);
-		std::swap(baseDirection[0], baseDirection[1]);
+		float baseDirection[3] = { 0.0f, 0.0f, -1.0f };
+		multiply_mat4_vec3_w0(baseDirection, quatRotationMatrix);
 
-		float baseRight[3] = { 0.0f, -1.0f, 0.0f };
-		rotate_quat(baseRight, localRotation);
-		std::swap(baseRight[0], baseRight[1]);
+		float baseRight[3] = { 1.0f, 0.0f, 0.0f };
+		multiply_mat4_vec3_w0(baseRight, quatRotationMatrix);
 
 		m_camera = { .fov = node->camera->data.perspective.yfov, .znear = node->camera->data.perspective.znear };
 

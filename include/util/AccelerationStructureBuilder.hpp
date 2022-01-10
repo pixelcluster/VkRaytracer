@@ -34,7 +34,7 @@ class AccelerationStructureBuilder {
 
   private:
 	size_t bestAccelerationStructureIndex(std::vector<AABB>& asBoundingBoxes, const AABB& modelBounds,
-										  const AABB& geometryBoundingBox);
+										  const AABB& geometryBoundingBox, bool resizeBoundingBoxes = true);
 	AccelerationStructureData createAccelerationStructure(
 		const VkAccelerationStructureBuildGeometryInfoKHR& buildInfos,
 														  const std::vector<uint32_t>& maxPrimitiveCounts,

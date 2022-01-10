@@ -1,7 +1,7 @@
 #include <DebugHelper.hpp>
-#include <util/AccelerationStructureBuilder.hpp>
-#include <cstring>
 #include <cmath>
+#include <cstring>
+#include <util/AccelerationStructureBuilder.hpp>
 
 // assign geometry to whichever AS it intersects with the most, undef this in order to assign geometries to ASes based
 // on whichever generates less intersection area between all AABBS (is O(n^2) instead of O(n) with n=number of ASes
@@ -82,10 +82,16 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	std::vector<VkTransformMatrixKHR> transformMatrices;
 	transformMatrices.reserve(modelLoader.geometries().size());
 
+	#ifdef AS_HEURISTIC_GEOMETRY_INTERSECTION
+	for (auto& geometry : modelLoader.geometries()) {
+		bestAccelerationStructureIndex(asAABBs, modelBounds, geometry.aabb);
+	}
+	#endif
+
 	size_t currentTransformBufferOffset = 0;
 	size_t geometryIndex = 0;
 	for (auto& geometry : modelLoader.geometries()) {
-		size_t asIndex = bestAccelerationStructureIndex(asAABBs, modelBounds, geometry.aabb);
+		size_t asIndex = bestAccelerationStructureIndex(asAABBs, modelBounds, geometry.aabb, false);
 		asGeometryData[asIndex].geometries.push_back(
 			{ .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
 			  .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
@@ -103,12 +109,13 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 																			   currentTransformBufferOffset } } },
 			  .flags = geometry.isAlphaTested ? 0U : VK_GEOMETRY_OPAQUE_BIT_KHR });
 		VkTransformMatrixKHR transformMatrix = { .matrix = {
-													 { geometry.transformMatrix[0], geometry.transformMatrix[4],
-													   geometry.transformMatrix[8], geometry.transformMatrix[12] },
-													 { geometry.transformMatrix[1], geometry.transformMatrix[5],
-													   geometry.transformMatrix[9], geometry.transformMatrix[13] },
-													 { geometry.transformMatrix[2], geometry.transformMatrix[6],
-													   geometry.transformMatrix[10], geometry.transformMatrix[14] } } };
+													 { geometry.transformMatrix[0], geometry.transformMatrix[1],
+													   geometry.transformMatrix[2], geometry.transformMatrix[3] },
+													 { geometry.transformMatrix[4], geometry.transformMatrix[5],
+													   geometry.transformMatrix[6], geometry.transformMatrix[7] },
+													 { geometry.transformMatrix[8], geometry.transformMatrix[9],
+													   geometry.transformMatrix[10], geometry.transformMatrix[11] }
+		} };
 		asGeometryData[asIndex].rangeInfos.push_back(
 			{ .primitiveCount = static_cast<uint32_t>(geometry.indexCount / 3) });
 		transformMatrices.push_back(transformMatrix);
@@ -224,9 +231,8 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 
 		uint32_t sphereCount = lightSpheres.size();
 
-		sphereBLASData =
-			createAccelerationStructure(sphereBuildInfo, { 1 },
-										accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment);
+		sphereBLASData = createAccelerationStructure(
+			sphereBuildInfo, { 1 }, accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment);
 
 		sphereBuildInfo.dstAccelerationStructure = sphereBLASData.accelerationStructure;
 		sphereBuildInfo.scratchData = { .deviceAddress = sphereBLASData.scratchBufferDeviceAddress };
@@ -244,8 +250,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 		verifyResult(vkCreateBuffer(m_device.device(), &sphereDataBufferCreateInfo, nullptr, &m_lightDataBuffer));
 
 		sphereDataBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		verifyResult(
-			vkCreateBuffer(m_device.device(), &sphereDataBufferCreateInfo, nullptr, &lightDataStagingBuffer));
+		verifyResult(vkCreateBuffer(m_device.device(), &sphereDataBufferCreateInfo, nullptr, &lightDataStagingBuffer));
 
 		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, m_lightDataBuffer, "Light Data buffer");
 		setObjectName(m_device.device(), VK_OBJECT_TYPE_BUFFER, lightDataStagingBuffer, "Light Data staging buffer");
@@ -269,7 +274,8 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 	verifyResult(vkCreateBuffer(m_device.device(), &geometryIndexBufferCreateInfo, nullptr, &m_geometryIndexBuffer));
 	geometryIndexBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 	VkBuffer geometryIndexStagingBuffer;
-	verifyResult(vkCreateBuffer(m_device.device(), &geometryIndexBufferCreateInfo, nullptr, &geometryIndexStagingBuffer));
+	verifyResult(
+		vkCreateBuffer(m_device.device(), &geometryIndexBufferCreateInfo, nullptr, &geometryIndexStagingBuffer));
 
 	m_allocator.bindDeviceBuffer(m_geometryIndexBuffer, 0);
 	void* mappedGeometryIndexBuffer = m_allocator.bindStagingBuffer(geometryIndexStagingBuffer, 0);
@@ -353,7 +359,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 											 { 0.0f, 2 * sphere.radius, 0.0f, sphere.position[1] },
 											 { 0.0f, 0.0f, 2 * sphere.radius, sphere.position[2] } } },
 				  .instanceCustomIndex = 0U,
-				  .mask = 0x01, //culled in ray gen
+				  .mask = 0x01, // culled in ray gen
 				  .instanceShaderBindingTableRecordOffset = lightSphereSBTIndex,
 				  .accelerationStructureReference =
 					  compactedSphereAccelerationStructureData.accelerationStructureDeviceAddress });
@@ -377,13 +383,14 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 		m_triangleBLASes.push_back(data.accelerationStructure);
 		m_triangleASBackingBuffers.push_back(data.backingBuffer);
 
-		tlasInstances.push_back({ .transform = { .matrix = { { 1.0f, 0.0f, 0.0f, 1.0f },
-															 { 0.0f, -1.0f, 0.0f, 1.0f },
-															 { 0.0f, 0.0f, 1.0f, 1.0f } } },
-								  .instanceCustomIndex = static_cast<uint32_t>(geometryIndexBufferOffsets[instanceIndex]),
-								  .mask = 0xFF,
-								  .instanceShaderBindingTableRecordOffset = triangleSBTIndex,
-								  .accelerationStructureReference = data.accelerationStructureDeviceAddress });
+		tlasInstances.push_back(
+			{ .transform = { .matrix = { { 1.0f, 0.0f, 0.0f, 1.0f },
+										 { 0.0f, -1.0f, 0.0f, 1.0f },
+										 { 0.0f, 0.0f, 1.0f, 1.0f } } },
+			  .instanceCustomIndex = static_cast<uint32_t>(geometryIndexBufferOffsets[instanceIndex]),
+			  .mask = 0xFF,
+			  .instanceShaderBindingTableRecordOffset = triangleSBTIndex,
+			  .accelerationStructureReference = data.accelerationStructureDeviceAddress });
 		++instanceIndex;
 	}
 
@@ -532,7 +539,8 @@ AccelerationStructureBuilder::~AccelerationStructureBuilder() {
 
 size_t AccelerationStructureBuilder::bestAccelerationStructureIndex(std::vector<AABB>& asBoundingBoxes,
 																	const AABB& modelBounds,
-																	const AABB& geometryBoundingBox) {
+																	const AABB& geometryBoundingBox,
+																	bool resizeBoundingBoxes) {
 	size_t chosenIndex = -1U;
 	float chosenIntersectionArea;
 
@@ -577,14 +585,44 @@ size_t AccelerationStructureBuilder::bestAccelerationStructureIndex(std::vector<
 #endif
 	}
 
-#ifndef AS_HEURISTIC_GEOMETRY_INTERSECTION // only useful when miminizing intersection area
-	asBoundingBoxes[chosenIndex].xmin = std::min(geometryBoundingBox.xmin, asBoundingBoxes[chosenIndex].xmin);
-	asBoundingBoxes[chosenIndex].ymin = std::min(geometryBoundingBox.ymin, asBoundingBoxes[chosenIndex].ymin);
-	asBoundingBoxes[chosenIndex].zmin = std::min(geometryBoundingBox.zmin, asBoundingBoxes[chosenIndex].zmin);
-	asBoundingBoxes[chosenIndex].xmax = std::max(geometryBoundingBox.xmax, asBoundingBoxes[chosenIndex].xmax);
-	asBoundingBoxes[chosenIndex].ymax = std::max(geometryBoundingBox.ymax, asBoundingBoxes[chosenIndex].ymax);
-	asBoundingBoxes[chosenIndex].zmax = std::max(geometryBoundingBox.zmax, asBoundingBoxes[chosenIndex].zmax);
-#endif
+	if (resizeBoundingBoxes) {
+		if (chosenIntersectionArea <= 0.001f)
+			return chosenIndex;
+		asBoundingBoxes[chosenIndex].xmin = std::min(geometryBoundingBox.xmin, asBoundingBoxes[chosenIndex].xmin);
+		asBoundingBoxes[chosenIndex].ymin = std::min(geometryBoundingBox.ymin, asBoundingBoxes[chosenIndex].ymin);
+		asBoundingBoxes[chosenIndex].zmin = std::min(geometryBoundingBox.zmin, asBoundingBoxes[chosenIndex].zmin);
+		asBoundingBoxes[chosenIndex].xmax = std::max(geometryBoundingBox.xmax, asBoundingBoxes[chosenIndex].xmax);
+		asBoundingBoxes[chosenIndex].ymax = std::max(geometryBoundingBox.ymax, asBoundingBoxes[chosenIndex].ymax);
+		asBoundingBoxes[chosenIndex].zmax = std::max(geometryBoundingBox.zmax, asBoundingBoxes[chosenIndex].zmax);
+
+		for (size_t i = 0; i < asBoundingBoxes.size(); ++i) {
+			if (i == chosenIndex)
+				continue;
+			if (asBoundingBoxes[i].xmax <= asBoundingBoxes[chosenIndex].xmax &&
+				asBoundingBoxes[i].xmax < asBoundingBoxes[chosenIndex].xmin) {
+				asBoundingBoxes[i].xmax = asBoundingBoxes[chosenIndex].xmin;
+			} else if (asBoundingBoxes[i].xmin < asBoundingBoxes[chosenIndex].xmax &&
+					   asBoundingBoxes[i].xmin >= asBoundingBoxes[chosenIndex].xmin) {
+				asBoundingBoxes[i].xmin = asBoundingBoxes[chosenIndex].xmin;
+			}
+
+			if (asBoundingBoxes[i].ymax <= asBoundingBoxes[chosenIndex].ymax &&
+				asBoundingBoxes[i].ymax < asBoundingBoxes[chosenIndex].ymin) {
+				asBoundingBoxes[i].ymax = asBoundingBoxes[chosenIndex].ymin;
+			} else if (asBoundingBoxes[i].ymin < asBoundingBoxes[chosenIndex].ymax &&
+					   asBoundingBoxes[i].ymin >= asBoundingBoxes[chosenIndex].ymin) {
+				asBoundingBoxes[i].ymin = asBoundingBoxes[chosenIndex].ymin;
+			}
+
+			if (asBoundingBoxes[i].zmax <= asBoundingBoxes[chosenIndex].zmax &&
+				asBoundingBoxes[i].zmax < asBoundingBoxes[chosenIndex].zmin) {
+				asBoundingBoxes[i].zmax = asBoundingBoxes[chosenIndex].zmin;
+			} else if (asBoundingBoxes[i].zmin < asBoundingBoxes[chosenIndex].zmax &&
+					   asBoundingBoxes[i].zmin >= asBoundingBoxes[chosenIndex].zmin) {
+				asBoundingBoxes[i].zmin = asBoundingBoxes[chosenIndex].zmin;
+			}
+		}
+	}
 
 	return chosenIndex;
 }
