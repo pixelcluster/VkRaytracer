@@ -27,20 +27,26 @@ float dot_vec3(const float vec1[3], const float vec2[3]) {
 // multiply 4x4 matrix with vec(x, y, z, 1)
 void multiply_mat4_vec3_w1(float vec[3], const float mat[16]) {
 	float tmp[3];
-	tmp[0] = dot_vec3(vec, mat);
-	tmp[1] = dot_vec3(vec, mat + 4);
-	tmp[2] = dot_vec3(vec, mat + 8);
-	tmp[0] += mat[3];
-	tmp[0] += mat[7];
-	tmp[0] += mat[11];
+	float mat_row1[3] = { mat[0], mat[4], mat[8] };
+	float mat_row2[3] = { mat[1], mat[5], mat[9] };
+	float mat_row3[3] = { mat[2], mat[6], mat[10] };
+	tmp[0] = dot_vec3(vec, mat_row1);
+	tmp[1] = dot_vec3(vec, mat_row2);
+	tmp[2] = dot_vec3(vec, mat_row3);
+	tmp[0] += mat[12];
+	tmp[1] += mat[13];
+	tmp[2] += mat[14];
 	std::memcpy(vec, tmp, 3 * sizeof(float));
 }
 
 void multiply_mat4_vec3_w0(float vec[3], const float mat[16]) {
 	float tmp[3];
-	tmp[0] = dot_vec3(vec, mat);
-	tmp[1] = dot_vec3(vec, mat + 4);
-	tmp[2] = dot_vec3(vec, mat + 8);
+	float mat_row1[3] = { mat[0], mat[4], mat[8] };
+	float mat_row2[3] = { mat[1], mat[5], mat[9] };
+	float mat_row3[3] = { mat[2], mat[6], mat[10] };
+	tmp[0] = dot_vec3(vec, mat_row1);
+	tmp[1] = dot_vec3(vec, mat_row2);
+	tmp[2] = dot_vec3(vec, mat_row3);
 	std::memcpy(vec, tmp, 3 * sizeof(float));
 }
 
@@ -295,7 +301,11 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	m_allocator.bindDeviceBuffer(m_materialBuffer, 0);
 	m_allocator.bindDeviceBuffer(m_geometryBuffer, 0);
 
-	stagingBufferCreateInfo.size = m_combinedImageSize;
+	if (m_combinedImageSize > 4_GiB) {
+		stagingBufferCreateInfo.size = m_maxImageSize;
+	} else {
+		stagingBufferCreateInfo.size = m_combinedImageSize;
+	}
 	verifyResult(vkCreateBuffer(m_device.device(), &stagingBufferCreateInfo, nullptr, &m_imageStagingBuffer));
 	void* imageStagingBufferData = m_allocator.bindStagingBuffer(m_imageStagingBuffer, 0);
 
@@ -445,6 +455,18 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	while (!blitImages.empty()) {
 		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
 							 &transferBarrier, 0, nullptr, 0, nullptr);
+
+		for (size_t i = 0; i < blitImages.size(); ++i) {
+			if (std::min(blitImages[i].width, blitImages[i].height) == 0) {
+				printf("Detected mip level with size 0, ..somehow? minIndex = %ull\n", mipIndex);
+				blitImages.erase(blitImages.begin() + i);
+				--i;
+			} else if (std::min(blitImages[i].width, blitImages[i].height) < 4) {
+				blitImages.erase(blitImages.begin() + i);
+				--i;
+			}
+		}
+
 		for (auto& image : blitImages) {
 			int32_t mipHeight = image.height / 2;
 			int32_t mipWidth = image.width / 2;
@@ -466,17 +488,6 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 						   &blit, VK_FILTER_LINEAR);
 			image.height = mipHeight;
 			image.width = mipWidth;
-		}
-
-		for (size_t i = 0; i < blitImages.size(); ++i) {
-			if (std::min(blitImages[i].width, blitImages[i].height) == 0) {
-				printf("Detected mip level with size 0, ..somehow? minIndex = %ull\n", mipIndex);
-				blitImages.erase(blitImages.begin() + i);
-				--i;
-			} else if (std::min(blitImages[i].width, blitImages[i].height) < 4) {
-				blitImages.erase(blitImages.begin() + i);
-				--i;
-			}
 		}
 		++mipIndex;
 	}
@@ -613,6 +624,11 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	std::memcpy(localRotation, rotation, 4 * sizeof(float));
 	std::memcpy(localScale, scale, 3 * sizeof(float));
 	// resolve child transforms and make global
+	if (node->has_scale) {
+		for (size_t i = 0; i < 3; ++i) {
+			localScale[i] *= node->scale[i];
+		}
+	}
 	if (node->has_translation) {
 		for (size_t i = 0; i < 3; ++i) {
 			localTranslation[i] += node->translation[i];
@@ -630,26 +646,21 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 		localRotation[3] = rotation[3] * node->rotation[3] + rotation[1] * node->rotation[1] +
 						   rotation[2] * node->rotation[2] + rotation[0] * node->rotation[0];
 	}
-	if (node->has_scale) {
-		for (size_t i = 0; i < 3; ++i) {
-			localScale[i] *= node->scale[i];
-		}
-	}
 
 	// clang-format off
 	//https://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToMatrix/index.htm
 	//assumed column-major matrix layout
 	float quatRotationMatrix[16] = {
-		 localRotation[3],  localRotation[2], -localRotation[1], -localRotation[0],
-		-localRotation[2],  localRotation[3],  localRotation[0], -localRotation[1],
-		 localRotation[1], -localRotation[0],  localRotation[3], -localRotation[2],
-		 localRotation[0],  localRotation[1],  localRotation[2],  localRotation[3],
-	};
-	float quatRotationMatrixFactor[16] = {
 		 localRotation[3],  localRotation[2], -localRotation[1], localRotation[0],
 		-localRotation[2],  localRotation[3],  localRotation[0], localRotation[1],
 		 localRotation[1], -localRotation[0],  localRotation[3], localRotation[2],
 		-localRotation[0], -localRotation[1], -localRotation[2], localRotation[3],
+	};
+	float quatRotationMatrixFactor[16] = {
+		 localRotation[3],  localRotation[2], -localRotation[1], -localRotation[0],
+		-localRotation[2],  localRotation[3],  localRotation[0], -localRotation[1],
+		 localRotation[1], -localRotation[0],  localRotation[3], -localRotation[2],
+		 localRotation[0],  localRotation[1],  localRotation[2],  localRotation[3],
 	};
 
 	float transformMatrix[16] = { //only translation at first, becomes transform matrix through matrix multiplications
@@ -671,21 +682,17 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	std::memcpy(noRotationTransformMatrix, transformMatrix, 16 * sizeof(float));
 
 	multiply_mat4(quatRotationMatrix, quatRotationMatrixFactor);
-	multiply_mat4(quatRotationMatrix, scaleMatrix);
-	multiply_mat4(quatRotationMatrix, transformMatrix);
-
-	std::memcpy(transformMatrix, quatRotationMatrix, 16 * sizeof(float));
+	multiply_mat4(transformMatrix, quatRotationMatrix);
+	multiply_mat4(transformMatrix, scaleMatrix);
 
 	multiply_mat4(noRotationTransformMatrix, scaleMatrix);
 
 	if (node->camera && node->camera->type == cgltf_camera_type_perspective) {
-		float baseDirection[3] = { 0.0f, 0.0f, 1.0f };
-		rotate_quat(baseDirection, localRotation);
-		std::swap(baseDirection[0], baseDirection[1]);
+		float baseDirection[3] = { 0.0f, 0.0f, -1.0f };
+		multiply_mat4_vec3_w0(baseDirection, quatRotationMatrix);
 
-		float baseRight[3] = { 0.0f, -1.0f, 0.0f };
-		rotate_quat(baseRight, localRotation);
-		std::swap(baseRight[0], baseRight[1]);
+		float baseRight[3] = { 1.0f, 0.0f, 0.0f };
+		multiply_mat4_vec3_w0(baseRight, quatRotationMatrix);
 
 		m_camera = { .fov = node->camera->data.perspective.yfov, .znear = node->camera->data.perspective.znear };
 
@@ -935,8 +942,7 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].tangentOffset / (sizeof(float) * 4)),
 				  .indexOffset =
 					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].indexOffset / sizeof(uint32_t)),
-				  .materialIndex = static_cast<uint32_t>(m_geometries[currentGeometryIndex].materialIndex +
-														 m_globalMaterialIndexOffset) });
+				  .materialIndex = static_cast<uint32_t>(m_geometries[currentGeometryIndex].materialIndex) });
 			++currentGeometryIndex;
 		}
 	}
@@ -1031,7 +1037,7 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 		imageData.size = imageData.width * imageData.height * 4;
 	}
 	m_combinedImageSize += imageData.size;
-	m_maxImageSize = std::max(m_maxImageSize, m_imageData.size());
+	m_maxImageSize = std::max(m_maxImageSize, imageData.size);
 	m_imageData.push_back(imageData);
 
 	VkImageCreateInfo imageCreateInfo = {

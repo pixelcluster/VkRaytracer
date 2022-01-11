@@ -188,7 +188,7 @@ void main() {
 			return;
 		}
 		else {
-			payload.rayThroughput /= russianRouletteWeight;
+			payload.rayThroughput /= 1.0f - russianRouletteWeight;
 		}
 
 		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
