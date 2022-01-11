@@ -54,9 +54,7 @@ layout(location = 0) rayPayloadInEXT RayPayload payload;
 hitAttributeEXT vec2 baryCoord;
 
 float roughnessToAlpha(float roughness) {
-	roughness = max(roughness, 1e-3);
-	float x = log(roughness);
-	return 1.62142f + 0.819955f * x + 0.1734f * x * x + 0.0171201f * x * x * x + 0.000640711f * x * x * x * x;
+	return ((9.12793 * roughness - 16.3381) * roughness + 9.84534) * roughness + 0.013222;
 }
 
 vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal, float alpha) {
@@ -150,7 +148,7 @@ void main() {
 
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
 
-	vec3 instanceColor = material.albedoFactor; 
+	vec3 instanceColor = material.albedoScale.xyz; 
 	if(albedoTexIndex != 65535)
 		instanceColor *= texture(textures[nonuniformEXT(albedoTexIndex)], texCoords).rgb;
 
@@ -159,17 +157,21 @@ void main() {
 	if(normalTexIndex != 65535 && abs(material.normalMapFactor) > 0.001f) {
 		mat3 tbn = mat3(tangent, cross(normal, tangent) * tangentData.w, normal);
 		vec3 normalMap = (texture(textures[nonuniformEXT(normalTexIndex)], texCoords).rgb * 2.0f - 1.0f) * material.normalMapFactor;
-		objectHitNormal = normalize((tbn * normalMap)) * vec3(1.0f, -1.0f, 1.0f);
+		objectHitNormal = normalize((tbn * normalMap));
 	}
+	objectHitNormal *= vec3(1.0f, -1.0f, 1.0f);
 
 	vec3 incomingRadiance = vec3(0.0f);
 
 	if(emissiveTexIndex != 65535)
-		incomingRadiance += texture(textures[nonuniformEXT(emissiveTexIndex)], texCoords).rgb * material.emissiveFactor.rgb * 500.0f;
+		incomingRadiance += texture(textures[nonuniformEXT(emissiveTexIndex)], texCoords).rgb * material.emissiveFactor.rgb * 200.0f;
 
 	float roughness = material.roughnessFactor;
-	if(metalRoughTexIndex != 65535)
-		roughness *= texture(textures[nonuniformEXT(metalRoughTexIndex)], texCoords).b;
+	float metal = material.metallicFactor;
+	if(metalRoughTexIndex != 65535) {
+		roughness *= texture(textures[nonuniformEXT(metalRoughTexIndex)], texCoords).g;
+
+	}
 
 	float alpha = roughnessToAlpha(roughness);
 
@@ -190,8 +192,12 @@ void main() {
 		else {
 			payload.rayThroughput /= 1.0f - russianRouletteWeight;
 		}
+		vec3 offset = 0.01f * objectHitNormal;
 
-		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
+		if(dot(sampleDir, objectHitNormal) < 0.0f) {
+			offset = 0.01f * normalize(-sampleDir);
+		}
+		traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + offset, 0, sampleDir, 999999999.0f, 0);
 
 		incomingRadiance += payload.color.rgb * max(payload.color.a, 0.0f);
 	}

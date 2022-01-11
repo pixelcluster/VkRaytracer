@@ -82,7 +82,7 @@ PipelineBuilder::PipelineBuilder(RayTracingDevice& device, MemoryAllocator& allo
 	VkDescriptorSetLayout layouts[3] = { m_imageDescriptorSetLayout, m_generalDescriptorSetLayout, textureSetLayout };
 
 	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-															.setLayoutCount = 3,
+															.setLayoutCount = textureSetLayout == VK_NULL_HANDLE ? 2U : 3U,
 															.pSetLayouts = layouts,
 															.pushConstantRangeCount = 1,
 															.pPushConstantRanges = &constantRange };

@@ -563,24 +563,26 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	vkDestroyBuffer(m_device.device(), m_indexStagingBuffer, nullptr);
 	vkDestroyBuffer(m_device.device(), m_imageStagingBuffer, nullptr);
 
-	std::vector<VkDescriptorImageInfo> textureImageInfos;
+	if (m_textures.size()) {
+		std::vector<VkDescriptorImageInfo> textureImageInfos;
 
-	textureImageInfos.reserve(m_textures.size());
+		textureImageInfos.reserve(m_textures.size());
 
-	for (auto& texture : m_textures) {
-		textureImageInfos.push_back({ .sampler = texture.sampler,
-									  .imageView = texture.view,
-									  .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+		for (auto& texture : m_textures) {
+			textureImageInfos.push_back({ .sampler = texture.sampler,
+										  .imageView = texture.view,
+										  .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+		}
+
+		VkWriteDescriptorSet setWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+										  .dstSet = m_textureDescriptorSet,
+										  .dstBinding = 0,
+										  .dstArrayElement = 0,
+										  .descriptorCount = static_cast<uint32_t>(m_textures.size()),
+										  .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+										  .pImageInfo = textureImageInfos.data() };
+		vkUpdateDescriptorSets(m_device.device(), 1, &setWrite, 0, nullptr);
 	}
-
-	VkWriteDescriptorSet setWrite = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-									  .dstSet = m_textureDescriptorSet,
-									  .dstBinding = 0,
-									  .dstArrayElement = 0,
-									  .descriptorCount = static_cast<uint32_t>(m_textures.size()),
-									  .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-									  .pImageInfo = textureImageInfos.data() };
-	vkUpdateDescriptorSets(m_device.device(), 1, &setWrite, 0, nullptr);
 }
 
 ModelLoader::~ModelLoader() {
@@ -601,8 +603,10 @@ ModelLoader::~ModelLoader() {
 	}
 	vkDestroySampler(m_device.device(), m_fallbackSampler, nullptr);
 
-	vkDestroyDescriptorPool(m_device.device(), m_textureDescriptorPool, nullptr);
-	vkDestroyDescriptorSetLayout(m_device.device(), m_textureDescriptorSetLayout, nullptr);
+	if (m_textures.size()) {
+		vkDestroyDescriptorPool(m_device.device(), m_textureDescriptorPool, nullptr);
+		vkDestroyDescriptorSetLayout(m_device.device(), m_textureDescriptorSetLayout, nullptr);
+	}
 }
 
 void ModelLoader::addScene(cgltf_data* data, cgltf_scene* scene) {
@@ -981,7 +985,7 @@ void ModelLoader::addMaterial(cgltf_data* data, cgltf_material* material) {
 											 data->textures + m_globalTextureIndexOffset;
 		}
 		if (material->pbr_metallic_roughness.metallic_roughness_texture.texture) {
-			newMaterial.metallicRoughnessTextureIndex = material->pbr_metallic_roughness.base_color_texture.texture -
+			newMaterial.metallicRoughnessTextureIndex = material->pbr_metallic_roughness.metallic_roughness_texture.texture -
 														data->textures + m_globalTextureIndexOffset;
 		}
 

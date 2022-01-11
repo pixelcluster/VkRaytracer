@@ -9,7 +9,7 @@ int main(int argc, const char** argv) {
 	verifyResult(volkInitialize());
 	glfwInit();
 
-	RayTracingDevice device = RayTracingDevice(640, 480, true);
+	RayTracingDevice device = RayTracingDevice(true);
 
 	std::vector<std::string_view> gltfFilenames;
 	gltfFilenames.reserve(argc - 1);
@@ -19,20 +19,20 @@ int main(int argc, const char** argv) {
 	}
 
 	std::vector<Sphere> spheres = {
-		/*{ .position = { -8.3395f, -0.76978f, -2.3374f, }, .radius = 0.5f, .color = { 0.8f, 0.6f, 0.6f, 500.0f } },
+		{ .position = { -8.3395f, -0.76978f, -2.3374f, }, .radius = 0.5f, .color = { 0.8f, 0.6f, 0.6f, 500.0f } },
 		{ .position = { 8.9656f, -0.76978f, -2.3374f }, .radius = 0.5f, .color = { 0.4f, 0.7f, 0.6f, 500.0f } },
-		{ .position = { -8.73348522f, -3.92734623f, -2.85059690f }, .radius = 0.5f, .color = { 0.8f, 0.5f, 0.4f, 500.0f } }*/
+		{ .position = { -8.73348522f, -3.92734623f, -2.85059690f }, .radius = 0.5f, .color = { 0.8f, 0.5f, 0.4f, 500.0f } },
 		{ .position = { 0.3f, -1.76978f, -2.3374f }, .radius = 0.5f, .color = { 0.7f, 0.7f, 0.7f, 500.0f } }
 	};
 
 	MemoryAllocator allocator = MemoryAllocator(device);
 	OneTimeDispatcher dispatcher = OneTimeDispatcher(device);
 	ModelLoader loader = ModelLoader(device, allocator, dispatcher, gltfFilenames);
-	AccelerationStructureBuilder builder = AccelerationStructureBuilder(
-		device, allocator, dispatcher, loader,
-		spheres, 0, 1);
+	AccelerationStructureBuilder builder =
+		AccelerationStructureBuilder(device, allocator, dispatcher, loader, spheres, 0, 1);
 	PipelineBuilder pipelineBuilder =
-		PipelineBuilder(device, allocator, dispatcher, loader.textureDescriptorSetLayout(), 8);
+		PipelineBuilder(device, allocator, dispatcher,
+						loader.textures().empty() ? VK_NULL_HANDLE : loader.textureDescriptorSetLayout(), 8);
 
 	TriangleMeshRaytracer raytracer = TriangleMeshRaytracer(device, allocator, loader, pipelineBuilder, builder);
 
