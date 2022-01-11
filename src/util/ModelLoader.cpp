@@ -1,10 +1,10 @@
 #define CGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #include <DebugHelper.hpp>
+#include <cstring>
 #include <filesystem>
 #include <stb_image.h>
 #include <util/ModelLoader.hpp>
-#include <cstring>
 
 void multiply_mat4(float mat1[16], const float mat2[16]) {
 	float tmp[16];
@@ -413,7 +413,8 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	bufferCopy.size = normalDataSize;
 	vkCmdCopyBuffer(commandBuffer, m_normalStagingBuffer, m_normalBuffer, 1, &bufferCopy);
 	bufferCopy.size = tangentDataSize;
-	vkCmdCopyBuffer(commandBuffer, m_tangentStagingBuffer, m_tangentBuffer, 1, &bufferCopy);
+	if (tangentDataSize)
+		vkCmdCopyBuffer(commandBuffer, m_tangentStagingBuffer, m_tangentBuffer, 1, &bufferCopy);
 	bufferCopy.size = uvDataSize;
 	vkCmdCopyBuffer(commandBuffer, m_uvStagingBuffer, m_uvBuffer, 1, &bufferCopy);
 	bufferCopy.size = indexDataSize;
@@ -495,40 +496,42 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	addressInfo.buffer = m_indexBuffer;
 	m_indexBufferDeviceAddress = vkGetBufferDeviceAddress(m_device.device(), &addressInfo);
 
-	VkDescriptorSetLayoutBinding binding = { .binding = 0,
-											 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-											 .descriptorCount = static_cast<uint32_t>(m_textures.size()),
-											 .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-														   VK_SHADER_STAGE_ANY_HIT_BIT_KHR };
+	if (m_textures.size() > 0) {
+		VkDescriptorSetLayoutBinding binding = { .binding = 0,
+												 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+												 .descriptorCount = static_cast<uint32_t>(m_textures.size()),
+												 .stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+															   VK_SHADER_STAGE_ANY_HIT_BIT_KHR };
 
-	VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 1,
-		.pBindings = &binding,
-	};
-	verifyResult(
-		vkCreateDescriptorSetLayout(m_device.device(), &layoutCreateInfo, nullptr, &m_textureDescriptorSetLayout));
+		VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = 1,
+			.pBindings = &binding,
+		};
+		verifyResult(
+			vkCreateDescriptorSetLayout(m_device.device(), &layoutCreateInfo, nullptr, &m_textureDescriptorSetLayout));
 
-	VkDescriptorPoolSize sampledImageSize = { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-											  .descriptorCount = static_cast<uint32_t>(m_textures.size()) };
-	VkDescriptorPoolCreateInfo createInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-											  .maxSets = 1,
-											  .poolSizeCount = 1,
-											  .pPoolSizes = &sampledImageSize };
-	verifyResult(vkCreateDescriptorPool(m_device.device(), &createInfo, nullptr, &m_textureDescriptorPool));
+		VkDescriptorPoolSize sampledImageSize = { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+												  .descriptorCount = static_cast<uint32_t>(m_textures.size()) };
+		VkDescriptorPoolCreateInfo createInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+												  .maxSets = 1,
+												  .poolSizeCount = 1,
+												  .pPoolSizes = &sampledImageSize };
+		verifyResult(vkCreateDescriptorPool(m_device.device(), &createInfo, nullptr, &m_textureDescriptorPool));
 
-	VkDescriptorSetAllocateInfo setAllocateInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-													.descriptorPool = m_textureDescriptorPool,
-													.descriptorSetCount = 1,
-													.pSetLayouts = &m_textureDescriptorSetLayout };
-	verifyResult(vkAllocateDescriptorSets(m_device.device(), &setAllocateInfo, &m_textureDescriptorSet));
+		VkDescriptorSetAllocateInfo setAllocateInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+														.descriptorPool = m_textureDescriptorPool,
+														.descriptorSetCount = 1,
+														.pSetLayouts = &m_textureDescriptorSetLayout };
+		verifyResult(vkAllocateDescriptorSets(m_device.device(), &setAllocateInfo, &m_textureDescriptorSet));
 
-	setObjectName(m_device.device(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, m_textureDescriptorSetLayout,
-				  "Texture descriptor set layout");
-	setObjectName(m_device.device(), VK_OBJECT_TYPE_DESCRIPTOR_POOL, m_textureDescriptorPool,
-				  "Texture descriptor pool");
-	setObjectName(m_device.device(), VK_OBJECT_TYPE_DESCRIPTOR_SET, m_textureDescriptorSet, "Texture descriptor set");
-
+		setObjectName(m_device.device(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, m_textureDescriptorSetLayout,
+					  "Texture descriptor set layout");
+		setObjectName(m_device.device(), VK_OBJECT_TYPE_DESCRIPTOR_POOL, m_textureDescriptorPool,
+					  "Texture descriptor pool");
+		setObjectName(m_device.device(), VK_OBJECT_TYPE_DESCRIPTOR_SET, m_textureDescriptorSet,
+					  "Texture descriptor set");
+	}
 	for (auto& data : gltfData) {
 		cgltf_free(data);
 	}

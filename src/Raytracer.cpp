@@ -311,7 +311,7 @@ bool TriangleMeshRaytracer::update() {
 								m_modelLoader.textureDescriptorSet() };
 
 	vkCmdBindDescriptorSets(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
-							m_pipelineBuilder.pipelineLayout(), 0, 3, sets, 0, nullptr);
+							m_pipelineBuilder.pipelineLayout(), 0, m_modelLoader.textures().size() ? 3 : 2, sets, 0, nullptr);
 
 	VkStridedDeviceAddressRegionKHR nullRegion = {};
 	VkStridedDeviceAddressRegionKHR raygenRegion = m_pipelineBuilder.raygenDeviceAddressRegion();

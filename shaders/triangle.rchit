@@ -150,15 +150,17 @@ void main() {
 
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
 
-	vec3 instanceColor = texture(textures[nonuniformEXT(albedoTexIndex)], texCoords).rgb;
+	vec3 instanceColor = material.albedoFactor; 
+	if(albedoTexIndex != 65535)
+		instanceColor *= texture(textures[nonuniformEXT(albedoTexIndex)], texCoords).rgb;
 
-	mat3 tbn = mat3(tangent, cross(normal, tangent) * tangentData.w, normal);
 
-	vec3 normalMap = vec3(0.0f, 0.0f, 1.0f);
-	if(normalTexIndex != 65535 && abs(material.normalMapFactor) > 0.001f)
-		normalMap = (texture(textures[nonuniformEXT(normalTexIndex)], texCoords).rgb * 2.0f - 1.0f) * material.normalMapFactor;
-
-	vec3 objectHitNormal = normalize((tbn * normalMap)) * vec3(1.0f, -1.0f, 1.0f);
+	vec3 objectHitNormal = normal;
+	if(normalTexIndex != 65535 && abs(material.normalMapFactor) > 0.001f) {
+		mat3 tbn = mat3(tangent, cross(normal, tangent) * tangentData.w, normal);
+		vec3 normalMap = (texture(textures[nonuniformEXT(normalTexIndex)], texCoords).rgb * 2.0f - 1.0f) * material.normalMapFactor;
+		objectHitNormal = normalize((tbn * normalMap)) * vec3(1.0f, -1.0f, 1.0f);
+	}
 
 	vec3 incomingRadiance = vec3(0.0f);
 
