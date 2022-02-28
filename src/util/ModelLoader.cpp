@@ -11,10 +11,10 @@ void multiply_mat4(float mat1[16], const float mat2[16]) {
 
 	//clang-format off
 	for (size_t i = 0; i < 4; ++i) {
-		tmp[i * 4 + 0] = mat1[i] * mat2[0] + mat1[i + 4] * mat2[1] + mat1[i + 8] * mat2[2] + mat1[i + 12] * mat2[3];
-		tmp[i * 4 + 1] = mat1[i] * mat2[4] + mat1[i + 4] * mat2[5] + mat1[i + 8] * mat2[6] + mat1[i + 12] * mat2[7];
-		tmp[i * 4 + 2] = mat1[i] * mat2[8] + mat1[i + 4] * mat2[9] + mat1[i + 8] * mat2[10] + mat1[i + 12] * mat2[11];
-		tmp[i * 4 + 3] = mat1[i] * mat2[12] + mat1[i + 4] * mat2[13] + mat1[i + 8] * mat2[14] + mat1[i + 12] * mat2[15];
+		tmp[i] = mat1[i] * mat2[0] + mat1[i + 4] * mat2[1] + mat1[i + 8] * mat2[2] + mat1[i + 12] * mat2[3];
+		tmp[4 + i] = mat1[i] * mat2[4] + mat1[i + 4] * mat2[5] + mat1[i + 8] * mat2[6] + mat1[i + 12] * mat2[7];
+		tmp[8 + i] = mat1[i] * mat2[8] + mat1[i + 4] * mat2[9] + mat1[i + 8] * mat2[10] + mat1[i + 12] * mat2[11];
+		tmp[12 + i] = mat1[i] * mat2[12] + mat1[i + 4] * mat2[13] + mat1[i + 8] * mat2[14] + mat1[i + 12] * mat2[15];
 	}
 	//clang-format on
 	std::memcpy(mat1, tmp, 16 * sizeof(float));
@@ -92,6 +92,40 @@ void rotate_quat(float vec[3], const float quat[4]) {
 	vec_add(factor1, factor3);
 
 	std::memcpy(vec, factor1, 3 * sizeof(float));
+}
+
+// https://github.com/graphitemaster/normals_revisited
+float minor(const float m[16], int r0, int r1, int r2, int c0, int c1, int c2) {
+	return m[4 * r0 + c0] * (m[4 * r1 + c1] * m[4 * r2 + c2] - m[4 * r2 + c1] * m[4 * r1 + c2]) -
+		   m[4 * r0 + c1] * (m[4 * r1 + c0] * m[4 * r2 + c2] - m[4 * r2 + c0] * m[4 * r1 + c2]) +
+		   m[4 * r0 + c2] * (m[4 * r1 + c0] * m[4 * r2 + c1] - m[4 * r2 + c0] * m[4 * r1 + c1]);
+}
+
+void cofactor(const float src[16], float dst[16]) {
+	dst[0] = minor(src, 1, 2, 3, 1, 2, 3);
+	dst[1] = -minor(src, 1, 2, 3, 0, 2, 3);
+	dst[2] = minor(src, 1, 2, 3, 0, 1, 3);
+	dst[3] = -minor(src, 1, 2, 3, 0, 1, 2);
+	dst[4] = -minor(src, 0, 2, 3, 1, 2, 3);
+	dst[5] = minor(src, 0, 2, 3, 0, 2, 3);
+	dst[6] = -minor(src, 0, 2, 3, 0, 1, 3);
+	dst[7] = minor(src, 0, 2, 3, 0, 1, 2);
+	dst[8] = minor(src, 0, 1, 3, 1, 2, 3);
+	dst[9] = -minor(src, 0, 1, 3, 0, 2, 3);
+	dst[10] = minor(src, 0, 1, 3, 0, 1, 3);
+	dst[11] = -minor(src, 0, 1, 3, 0, 1, 2);
+	dst[12] = -minor(src, 0, 1, 2, 1, 2, 3);
+	dst[13] = minor(src, 0, 1, 2, 0, 2, 3);
+	dst[14] = -minor(src, 0, 1, 2, 0, 1, 3);
+	dst[15] = minor(src, 0, 1, 2, 0, 1, 2);
+}
+
+float floatsign(float x) {
+	if (x < -0.0001f)
+		return -1.0f;
+	if (x > 0.0001f)
+		return 1.0f;
+	return 0.0f;
 }
 
 void checkCGLTFResult(cgltf_result result, const std::string_view& gltfFilename) {
@@ -622,10 +656,12 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	// local -> global transform
 	float localTranslation[3];
 	float localRotation[4];
+	float localRotationFlipped[4];
 	float localScale[3];
 
 	std::memcpy(localTranslation, translation, 3 * sizeof(float));
 	std::memcpy(localRotation, rotation, 4 * sizeof(float));
+	std::memcpy(localRotationFlipped, rotation, 4 * sizeof(float));
 	std::memcpy(localScale, scale, 3 * sizeof(float));
 	// resolve child transforms and make global
 	if (node->has_scale) {
@@ -641,55 +677,87 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	if (node->has_rotation) {
 		// multiply quaternions
 		// https://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/arithmetic/index.htm
-		localRotation[0] = rotation[3] * node->rotation[0] + rotation[1] * node->rotation[2] +
-						   rotation[2] * node->rotation[1] + rotation[0] * node->rotation[3];
-		localRotation[1] = rotation[1] * node->rotation[3] + rotation[3] * node->rotation[1] +
-						   rotation[2] * node->rotation[0] + rotation[0] * node->rotation[2];
-		localRotation[2] = rotation[3] * node->rotation[2] + rotation[1] * node->rotation[0] +
-						   rotation[2] * node->rotation[3] + rotation[0] * node->rotation[1];
-		localRotation[3] = rotation[3] * node->rotation[3] + rotation[1] * node->rotation[1] +
-						   rotation[2] * node->rotation[2] + rotation[0] * node->rotation[0];
+		localRotation[0] = node->rotation[3] * rotation[0] + node->rotation[1] * rotation[2] +
+						   node->rotation[2] * rotation[1] + node->rotation[0] * rotation[3];
+		localRotation[1] = node->rotation[1] * rotation[3] + node->rotation[3] * rotation[1] +
+						   node->rotation[2] * rotation[0] + node->rotation[0] * rotation[2];
+		localRotation[2] = node->rotation[3] * rotation[2] + node->rotation[1] * rotation[0] +
+						   node->rotation[2] * rotation[3] + node->rotation[0] * rotation[1];
+		localRotation[3] = node->rotation[3] * rotation[3] + node->rotation[1] * rotation[1] +
+						   node->rotation[2] * rotation[2] + node->rotation[0] * rotation[0];
 	}
+
+	float flipQuat[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	localRotationFlipped[0] = localRotation[3] * flipQuat[0] + localRotation[1] * flipQuat[2] +
+							  localRotation[2] * flipQuat[1] + localRotation[0] * flipQuat[3];
+	localRotationFlipped[1] = localRotation[1] * flipQuat[3] + localRotation[3] * flipQuat[1] +
+							  localRotation[2] * flipQuat[0] + localRotation[0] * flipQuat[2];
+	localRotationFlipped[2] = localRotation[3] * flipQuat[2] + localRotation[1] * flipQuat[0] +
+							  localRotation[2] * flipQuat[3] + localRotation[0] * flipQuat[1];
+	localRotationFlipped[3] = localRotation[3] * flipQuat[3] + localRotation[1] * flipQuat[1] +
+							  localRotation[2] * flipQuat[2] + localRotation[0] * flipQuat[0];
 
 	// clang-format off
 	//https://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToMatrix/index.htm
 	//assumed column-major matrix layout
 	float quatRotationMatrix[16] = {
-		 localRotation[3],  localRotation[2], -localRotation[1], localRotation[0],
-		-localRotation[2],  localRotation[3],  localRotation[0], localRotation[1],
-		 localRotation[1], -localRotation[0],  localRotation[3], localRotation[2],
-		-localRotation[0], -localRotation[1], -localRotation[2], localRotation[3],
+		 localRotationFlipped[3],  localRotationFlipped[2], -localRotationFlipped[1], -localRotationFlipped[0],
+		-localRotationFlipped[2],  localRotationFlipped[3],  localRotationFlipped[0], -localRotationFlipped[1],
+		 localRotationFlipped[1], -localRotationFlipped[0],  localRotationFlipped[3], -localRotationFlipped[2],
+		 localRotationFlipped[0],  localRotationFlipped[1],  localRotationFlipped[2],  localRotationFlipped[3],
 	};
 	float quatRotationMatrixFactor[16] = {
-		 localRotation[3],  localRotation[2], -localRotation[1], -localRotation[0],
-		-localRotation[2],  localRotation[3],  localRotation[0], -localRotation[1],
-		 localRotation[1], -localRotation[0],  localRotation[3], -localRotation[2],
-		 localRotation[0],  localRotation[1],  localRotation[2],  localRotation[3],
+		 localRotationFlipped[3],  localRotationFlipped[2], -localRotationFlipped[1], localRotationFlipped[0],
+		-localRotationFlipped[2],  localRotationFlipped[3],  localRotationFlipped[0], localRotationFlipped[1],
+		 localRotationFlipped[1], -localRotationFlipped[0],  localRotationFlipped[3], localRotationFlipped[2],
+		-localRotationFlipped[0], -localRotationFlipped[1], -localRotationFlipped[2], localRotationFlipped[3],
 	};
 
-	float transformMatrix[16] = { //only translation at first, becomes transform matrix through matrix multiplications
+	float translationMatrix[16] = { //only translation at first, becomes transform matrix through matrix multiplications
 		1.0f, 0.0f, 0.0f, localTranslation[0],
-		0.0f, 1.0f, 0.0f, localTranslation[1],
-		0.0f, 0.0f, 1.0f, localTranslation[2],
+		0.0f, 1.0f, 0.0f, -localTranslation[1],
+		0.0f, 0.0f, 1.0f, -localTranslation[2],
 		0.0f, 0.0f, 0.0f, 1.0f
 	};
 
 	float scaleMatrix[16] = {
 		localScale[0], 0.0f,		  0.0f,			 0.0f,
-		0.0f,		   localScale[1], 0.0f,			 0.0f,
+		0.0f,		   localScale[1], 0.0f,		 0.0f,
 		0.0f,		   0.0f,		  localScale[2], 0.0f,
 		0.0f,		   0.0f,		  0.0f,			 1.0f
 	};
-	// clang-format on
+	float coordinateScaleMatrix[16] = {
+		1.0f,  0.0f, 0.0f, 0.0f,
+		0.0f, -1.0f, 0.0f, 0.0f,
+		0.0f,  0.0f, 1.0f, 0.0f,
+		0.0f,  0.0f, 0.0f, 1.0f
+	};
 
 	float noRotationTransformMatrix[16];
-	std::memcpy(noRotationTransformMatrix, transformMatrix, 16 * sizeof(float));
+	float noTranslationTransformMatrix[16];
+	float transformMatrix[16] = {
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	};
+	float normalTransformMatrix[16] = {
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	};
+	// clang-format on
+	std::memcpy(noRotationTransformMatrix, translationMatrix, 16 * sizeof(float));
+	multiply_mat4(noRotationTransformMatrix, scaleMatrix);
 
 	multiply_mat4(quatRotationMatrix, quatRotationMatrixFactor);
-	multiply_mat4(transformMatrix, quatRotationMatrix);
-	multiply_mat4(transformMatrix, scaleMatrix);
 
-	multiply_mat4(noRotationTransformMatrix, scaleMatrix);
+	multiply_mat4(transformMatrix, scaleMatrix);
+	multiply_mat4(transformMatrix, quatRotationMatrix);
+	multiply_mat4(transformMatrix, translationMatrix);
+
+	multiply_mat4(normalTransformMatrix, quatRotationMatrix);
 
 	if (node->camera && node->camera->type == cgltf_camera_type_perspective) {
 		float baseDirection[3] = { 0.0f, 0.0f, -1.0f };
@@ -788,6 +856,7 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 							  .zmax = aabbMax[2] };
 
 			std::memcpy(geometry.transformMatrix, transformMatrix, 16 * sizeof(float));
+			std::memcpy(geometry.normalTransformMatrix, normalTransformMatrix, 16 * sizeof(float));
 
 			m_geometries.push_back(std::move(geometry));
 		}
@@ -947,6 +1016,16 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 				  .indexOffset =
 					  static_cast<uint32_t>(m_geometries[currentGeometryIndex].indexOffset / sizeof(uint32_t)),
 				  .materialIndex = static_cast<uint32_t>(m_geometries[currentGeometryIndex].materialIndex) });
+			float normalTransform[9] = { m_geometries[currentGeometryIndex].normalTransformMatrix[0],
+										 m_geometries[currentGeometryIndex].normalTransformMatrix[4],
+										 m_geometries[currentGeometryIndex].normalTransformMatrix[8],
+										 m_geometries[currentGeometryIndex].normalTransformMatrix[1],
+										 m_geometries[currentGeometryIndex].normalTransformMatrix[5],
+										 m_geometries[currentGeometryIndex].normalTransformMatrix[9],
+										 m_geometries[currentGeometryIndex].normalTransformMatrix[2],
+										 m_geometries[currentGeometryIndex].normalTransformMatrix[6],
+										 m_geometries[currentGeometryIndex].normalTransformMatrix[10] };
+			std::memcpy(m_gpuGeometries.back().normalTransformMatrix, normalTransform, 9 * sizeof(float));
 			++currentGeometryIndex;
 		}
 	}
@@ -985,8 +1064,9 @@ void ModelLoader::addMaterial(cgltf_data* data, cgltf_material* material) {
 											 data->textures + m_globalTextureIndexOffset;
 		}
 		if (material->pbr_metallic_roughness.metallic_roughness_texture.texture) {
-			newMaterial.metallicRoughnessTextureIndex = material->pbr_metallic_roughness.metallic_roughness_texture.texture -
-														data->textures + m_globalTextureIndexOffset;
+			newMaterial.metallicRoughnessTextureIndex =
+				material->pbr_metallic_roughness.metallic_roughness_texture.texture - data->textures +
+				m_globalTextureIndexOffset;
 		}
 
 		newMaterial.albedoScale[0] = material->pbr_metallic_roughness.base_color_factor[0];

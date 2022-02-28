@@ -43,6 +43,7 @@ struct AABB {
 struct Geometry {
 	bool isAlphaTested;
 	float transformMatrix[16];
+	float normalTransformMatrix[16];
 
 	AABB aabb;
 
@@ -66,6 +67,8 @@ struct GPUGeometry {
 	uint32_t indexOffset;
 
 	uint32_t materialIndex;
+
+	float normalTransformMatrix[9];
 };
 
 struct Material {
@@ -99,8 +102,8 @@ struct ImageData {
 };
 
 struct Camera {
-	float position[3] = { 2.0f, 2.0f, 0.0f };
-	float direction[3] = { 1.0f, 0.0f, 0.0f };
+	float position[3] = { 4.0f, 0.0f, 1.0f };
+	float direction[3] = { -1.0f, 0.0f, 0.0f };
 	float right[3] = { 0.0f, 0.0f, 1.0f };
 	float fov;
 	float znear;

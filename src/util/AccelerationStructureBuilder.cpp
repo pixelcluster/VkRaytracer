@@ -385,7 +385,7 @@ AccelerationStructureBuilder::AccelerationStructureBuilder(RayTracingDevice& dev
 
 		tlasInstances.push_back(
 			{ .transform = { .matrix = { { 1.0f, 0.0f, 0.0f, 1.0f },
-										 { 0.0f, -1.0f, 0.0f, 1.0f },
+										 { 0.0f, 1.0f, 0.0f, 1.0f },
 										 { 0.0f, 0.0f, 1.0f, 1.0f } } },
 			  .instanceCustomIndex = static_cast<uint32_t>(geometryIndexBufferOffsets[instanceIndex]),
 			  .mask = 0xFF,

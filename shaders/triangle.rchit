@@ -54,7 +54,7 @@ layout(location = 0) rayPayloadInEXT RayPayload payload;
 hitAttributeEXT vec2 baryCoord;
 
 float roughnessToAlpha(float roughness) {
-	return ((9.12793 * roughness - 16.3381) * roughness + 9.84534) * roughness + 0.013222;
+	return ((9.12793 * roughness - 16.3381) * roughness + 9.84534) * roughness;
 }
 
 vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal, float alpha) {
@@ -75,28 +75,37 @@ vec3 sampleLight(vec3 hitPoint, vec3 objectHitNormal, float alpha) {
 
 	payload.isLightSample = true;
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
+
 	
 	if(lightIndex == lights.length()) {
-		sampleRadiance += weightLightEnvmap(alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
+		sampleRadiance += weightLightEnvmap(max(alpha, 0.001f), hitPoint, sampleDir, objectHitNormal, payload.color);
 }
 	else {
 		LightData lightData = LightData(vec4(0.0f), vec4(0.0f));
 		lightData = lights[lightIndex];
-		sampleRadiance += weightLight(lightData, alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
+		sampleRadiance += weightLight(lightData, max(alpha, 0.00001f), hitPoint, sampleDir, objectHitNormal, payload.color);
 	}
 	
 	//Sample BSDF
 		
 	lightIndex = min(uint(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) * (lights.length() + 1)), lights.length());
-	sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, alpha, payload.randomState));
+	lightIndex = lights.length();
+	vec3 normal;
+	if(alpha > 0.0f) {
+		normal = sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, max(alpha, 0.01f), payload.randomState);
+	}
+	else {
+		normal = objectHitNormal;
+	}
+	sampleDir = reflect(gl_WorldRayDirectionEXT, normal);
 			
 	payload.isLightSample = true;
 	traceRayEXT(tlasStructure, gl_RayFlagsNoneEXT, 0xFF, 0, 0, 0, hitPoint + 0.01f * objectHitNormal, 0, sampleDir, 999999999.0f, 0);
 			
 	if(lightIndex == lights.length())
-		sampleRadiance += weightBSDFEnvmap(alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
+		sampleRadiance += weightBSDFEnvmap(max(alpha, 0.01f), hitPoint, sampleDir, objectHitNormal, payload.color);
 	else
-		sampleRadiance += weightBSDFLight(lights[lightIndex], alpha, hitPoint, sampleDir, objectHitNormal, payload.color);
+		sampleRadiance += weightBSDFLight(lights[lightIndex], max(alpha, 0.001f), hitPoint, sampleDir, objectHitNormal, payload.color);
 		
 	return sampleRadiance * (lights.length() + 1.0f);
 }
@@ -106,6 +115,7 @@ void main() {
 		payload.color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 		return;
 	}
+
 
 	GeometryData data = geometryData[geometryIndices[gl_InstanceCustomIndexEXT + gl_GeometryIndexEXT]];
 	uint primitiveIndices[3] = uint[3](
@@ -135,7 +145,7 @@ void main() {
 	vec3 baryCoords = vec3(1.0f - baryCoord.x - baryCoord.y, baryCoord.x, baryCoord.y);
 
 	vec2 texCoords = baryCoords.x * texcoords[0] + baryCoords.y * texcoords[1] + baryCoords.z * texcoords[2];
-	vec3 normal = normalize(baryCoords.x * normals[0] + baryCoords.y * normals[1] + baryCoords.z * normals[2]);
+	vec3 normal = normalize(data.normalTransformMatrix * (baryCoords.x * normals[0] + baryCoords.y * normals[1] + baryCoords.z * normals[2]));
 	vec4 tangentData = baryCoords.x * tangents[0] + baryCoords.y * tangents[1] + baryCoords.z * tangents[2];
 	vec3 tangent = normalize(tangentData.xyz);
 
@@ -159,7 +169,6 @@ void main() {
 		vec3 normalMap = (texture(textures[nonuniformEXT(normalTexIndex)], texCoords).rgb * 2.0f - 1.0f) * material.normalMapFactor;
 		objectHitNormal = normalize((tbn * normalMap));
 	}
-	objectHitNormal *= vec3(1.0f, -1.0f, 1.0f);
 
 	vec3 incomingRadiance = vec3(0.0f);
 
@@ -180,9 +189,15 @@ void main() {
 	payload.isLightSample = false;
 	
 	if(payload.recursionDepth++ < 7) {
-		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, alpha, payload.randomState));
+		if(alpha > 0.0f) {
+			normal = sampleMicrofacetDistribution(-gl_WorldRayDirectionEXT, objectHitNormal, alpha, payload.randomState);
+		}
+		else {
+			normal = objectHitNormal;
+		}
+		vec3 sampleDir = reflect(gl_WorldRayDirectionEXT, normal);
 
-		payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal, alpha);
+		payload.rayThroughput *= microfacetWeight(sampleDir, -gl_WorldRayDirectionEXT, objectHitNormal, max(alpha, 0.01f));
 		
 		float russianRouletteWeight = 1.0f - max(payload.rayThroughput, 0.995); //see pbrt
 		if(nextRand(payload.randomState) * uintBitsToFloat(0x2f800004U) < russianRouletteWeight) {

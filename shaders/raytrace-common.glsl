@@ -18,6 +18,8 @@ struct GeometryData {
 	uint indexOffset;
 
 	uint materialIndex;
+
+	mat3 normalTransformMatrix;
 };
 
 struct Material {
