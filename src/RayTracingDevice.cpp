@@ -309,8 +309,7 @@ void RayTracingDevice::createPerFrameData(size_t index) {
 					  "Image acquire wait semaphore for frame " + indexString + " in flight");
 		setObjectName(m_device, VK_OBJECT_TYPE_SEMAPHORE, presentReadySemaphore,
 					  "Present signal semaphore for frame " + indexString + " in flight");
-		setObjectName(m_device, VK_OBJECT_TYPE_FENCE, fence,
-					  "Fence for frame " + indexString + " in flight");
+		setObjectName(m_device, VK_OBJECT_TYPE_FENCE, fence, "Fence for frame " + indexString + " in flight");
 	}
 	m_perFrameData[index] = data;
 }
@@ -461,8 +460,7 @@ bool RayTracingDevice::endFrame() {
 									 .pImageIndices = &m_currentImageIndex,
 									 .pResults = &presentResult };
 
-	verifyResult(vkQueuePresentKHR(m_queue, &presentInfo));
-	verifyResult(presentResult);
+	vkQueuePresentKHR(m_queue, &presentInfo);
 
 	if (presentResult == VK_SUBOPTIMAL_KHR) {
 		m_swapchain =
@@ -473,7 +471,8 @@ bool RayTracingDevice::endFrame() {
 		m_shouldNotifySizeChange = true;
 	} else if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_isSwapchainGood = false;
-	}
+	} else
+		verifyResult(presentResult);
 
 	++m_currentFrameIndex %= frameInFlightCount;
 	return !m_window.shouldWindowClose();
@@ -486,8 +485,7 @@ uint32_t RayTracingDevice::findBestMemoryIndex(VkMemoryPropertyFlags required, V
 	uint32_t numUnrelatedFlags = -1U;
 
 	for (uint32_t i = 0; i < m_memoryProperties.memoryTypeCount; ++i) {
-		if ((m_memoryProperties.memoryTypes[i].propertyFlags & required) != required ||
-			(m_memoryProperties.memoryTypes[i].propertyFlags & forbidden)) {
+		if ((m_memoryProperties.memoryTypes[i].propertyFlags & required) != required || ((1U << i) & forbidden)) {
 			continue;
 		}
 

@@ -5,11 +5,8 @@ project(VkRaytracer VERSION 0.5)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_subdirectory(dependencies/glfw)
-add_subdirectory(dependencies/volk)
-
 if(UNIX AND NOT APPLE)
-	option(USE_WAYLAND "Use Wayland instead of X11")
+	option(USE_WAYLAND "Use Wayland instead of X11" OFF)
 	if(USE_WAYLAND)
 		set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WAYLAND_KHR)
 		set(GLFW_USE_WAYLAND TRUE)
@@ -17,6 +14,9 @@ if(UNIX AND NOT APPLE)
 elseif(WIN32)
 	set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR)
 endif()
+
+add_subdirectory(dependencies/glfw)
+add_subdirectory(dependencies/volk)
 
 file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS 
 	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
