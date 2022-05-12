@@ -3,12 +3,19 @@
 #include <iostream>
 
 Window::Window(const std::string_view& windowName) {
-	glfwWindowHint(GLFW_STICKY_KEYS, GLFW_TRUE);
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	const GLFWvidmode* primaryMonitorVidmode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-	m_window = glfwCreateWindow(primaryMonitorVidmode->width, primaryMonitorVidmode->height, windowName.data(), monitor,
-								nullptr);
+	m_window = glfwCreateWindow(primaryMonitorVidmode->width, primaryMonitorVidmode->height, windowName.data(), monitor, nullptr);
+
+	const char* desc;
+	int error;
+	do {
+		error = glfwGetError(&desc);
+		if (error) {
+			std::cout << "GLFW error! " << desc << "\n";
+		}
+	} while (error);
 
 	m_width = static_cast<size_t>(primaryMonitorVidmode->width);
 	m_height = static_cast<size_t>(primaryMonitorVidmode->height);

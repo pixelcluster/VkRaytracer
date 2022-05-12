@@ -7,3 +7,6 @@
 [submodule "dependencies/cgltf"]
 	path = dependencies/cgltf
 	url = https://github.com/jkuhlmann/cgltf.git
+[submodule "dependencies/glm"]
+	path = dependencies/glm
+	url = https://github.com/g-truc/glm.git

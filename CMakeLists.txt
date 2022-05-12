@@ -17,6 +17,7 @@ endif()
 
 add_subdirectory(dependencies/glfw)
 add_subdirectory(dependencies/volk)
+add_subdirectory(dependencies/glm)
 
 file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS 
 	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
@@ -29,7 +30,7 @@ add_executable(VkRaytracer ${CPP_SOURCES} ${HEADERS})
 
 target_include_directories(VkRaytracer PUBLIC "include" "dependencies/cgltf" "dependencies/stb-image" Vulkan_INCLUDE_DIRS)
 
-target_link_libraries(VkRaytracer glfw volk::volk)
+target_link_libraries(VkRaytracer glfw volk::volk glm)
 
 file(GLOB SHADERS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
@@ -45,7 +46,7 @@ foreach(SHADER IN LISTS SHADERS)
 
 	list(APPEND SHADER_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/depend-dummy-${FILENAME}.${EXTENSION}")
 	add_custom_command(OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/shaders/depend-dummy-${FILENAME}.${EXTENSION}"
-					   COMMAND "glslc" ARGS "-O" "--target-env=vulkan1.2" "-o" "${CMAKE_CURRENT_BINARY_DIR}/shaders/${FILENAME}-${EXTENSION}.spv" ${SOURCEPATH}
+					   COMMAND "glslangValidator" ARGS "-g" "--target-env" "vulkan1.2" "-o" "${CMAKE_CURRENT_BINARY_DIR}/shaders/${FILENAME}-${EXTENSION}.spv" ${SOURCEPATH}
 					   DEPENDS ${SOURCEPATH})
 endforeach()
 

@@ -1,6 +1,7 @@
 #include <util/OneTimeDispatcher.hpp>
 #include <volk.h>
 #include <ErrorHelper.hpp>
+#include <algorithm>
 
 OneTimeDispatcher::OneTimeDispatcher(RayTracingDevice& device) : m_device(device) {
 	VkCommandPoolCreateInfo poolCreateInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,

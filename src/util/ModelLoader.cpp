@@ -1,98 +1,11 @@
 #define CGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #include <DebugHelper.hpp>
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <stb_image.h>
 #include <util/ModelLoader.hpp>
-
-void multiply_mat4(float mat1[16], const float mat2[16]) {
-	float tmp[16];
-
-	//clang-format off
-	for (size_t i = 0; i < 4; ++i) {
-		tmp[i] = mat1[i] * mat2[0] + mat1[i + 4] * mat2[1] + mat1[i + 8] * mat2[2] + mat1[i + 12] * mat2[3];
-		tmp[4 + i] = mat1[i] * mat2[4] + mat1[i + 4] * mat2[5] + mat1[i + 8] * mat2[6] + mat1[i + 12] * mat2[7];
-		tmp[8 + i] = mat1[i] * mat2[8] + mat1[i + 4] * mat2[9] + mat1[i + 8] * mat2[10] + mat1[i + 12] * mat2[11];
-		tmp[12 + i] = mat1[i] * mat2[12] + mat1[i + 4] * mat2[13] + mat1[i + 8] * mat2[14] + mat1[i + 12] * mat2[15];
-	}
-	//clang-format on
-	std::memcpy(mat1, tmp, 16 * sizeof(float));
-}
-
-float dot_vec3(const float vec1[3], const float vec2[3]) {
-	return vec1[0] * vec2[0] + vec1[1] * vec2[1] + vec1[2] * vec2[2];
-}
-
-// multiply 4x4 matrix with vec(x, y, z, 1)
-void multiply_mat4_vec3_w1(float vec[3], const float mat[16]) {
-	float tmp[3];
-	float mat_row1[3] = { mat[0], mat[4], mat[8] };
-	float mat_row2[3] = { mat[1], mat[5], mat[9] };
-	float mat_row3[3] = { mat[2], mat[6], mat[10] };
-	tmp[0] = dot_vec3(vec, mat_row1);
-	tmp[1] = dot_vec3(vec, mat_row2);
-	tmp[2] = dot_vec3(vec, mat_row3);
-	tmp[0] += mat[12];
-	tmp[1] += mat[13];
-	tmp[2] += mat[14];
-	std::memcpy(vec, tmp, 3 * sizeof(float));
-}
-
-void multiply_mat4_vec3_w0(float vec[3], const float mat[16]) {
-	float tmp[3];
-	float mat_row1[3] = { mat[0], mat[4], mat[8] };
-	float mat_row2[3] = { mat[1], mat[5], mat[9] };
-	float mat_row3[3] = { mat[2], mat[6], mat[10] };
-	tmp[0] = dot_vec3(vec, mat_row1);
-	tmp[1] = dot_vec3(vec, mat_row2);
-	tmp[2] = dot_vec3(vec, mat_row3);
-	std::memcpy(vec, tmp, 3 * sizeof(float));
-}
-
-void cross_vec3(float vec1[3], const float vec2[3]) {
-	float tmp[3];
-	tmp[0] = vec1[1] * vec2[2] - vec1[2] * vec2[1];
-	tmp[1] = vec1[2] * vec2[0] - vec1[0] * vec2[2];
-	tmp[2] = vec1[0] * vec2[1] - vec1[1] * vec2[0];
-	std::memcpy(vec1, tmp, 3 * sizeof(float));
-}
-
-void vec_add(float vec1[3], const float vec2[3]) {
-	vec1[0] += vec2[0];
-	vec1[1] += vec2[1];
-	vec1[2] += vec2[2];
-}
-
-void vec_mul(float vec1[3], float s) {
-	vec1[0] *= s;
-	vec1[1] *= s;
-	vec1[2] *= s;
-}
-
-void rotate_quat(float vec[3], const float quat[4]) {
-	// https://gamedev.stackexchange.com/questions/28395/rotating-vector3-by-a-quaternion
-	float qvec[3] = { quat[0], quat[1], quat[2] };
-	float qvec_length2 = dot_vec3(qvec, qvec);
-	float qscal = quat[3];
-
-	float vec_tmp[3] = { vec[0], vec[1], vec[2] };
-
-	float factor1[3] = { qvec[0], qvec[1], qvec[2] };
-	float factor2[3] = { vec[0], vec[1], vec[2] };
-
-	float factor3[3] = { qvec[0], qvec[1], qvec[2] };
-	cross_vec3(factor3, vec);
-
-	vec_mul(factor1, 2.0f * dot_vec3(qvec, vec_tmp));
-	vec_mul(factor2, qscal * qscal - qvec_length2);
-	vec_mul(factor3, 2.0f * qscal);
-
-	vec_add(factor1, factor2);
-	vec_add(factor1, factor3);
-
-	std::memcpy(vec, factor1, 3 * sizeof(float));
-}
 
 // https://github.com/graphitemaster/normals_revisited
 float minor(const float m[16], int r0, int r1, int r2, int c0, int c1, int c2) {
@@ -335,11 +248,11 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	m_allocator.bindDeviceBuffer(m_materialBuffer, 0);
 	m_allocator.bindDeviceBuffer(m_geometryBuffer, 0);
 
-	if (m_combinedImageSize > 4_GiB) {
-		stagingBufferCreateInfo.size = m_maxImageSize;
-	} else {
-		stagingBufferCreateInfo.size = m_combinedImageSize;
-	}
+	/*	if (m_combinedImageSize > 4_GiB) {
+			stagingBufferCreateInfo.size = m_maxImageSize;
+		} else {*/
+	stagingBufferCreateInfo.size = m_combinedImageSize;
+	//}
 	verifyResult(vkCreateBuffer(m_device.device(), &stagingBufferCreateInfo, nullptr, &m_imageStagingBuffer));
 	void* imageStagingBufferData = m_allocator.bindStagingBuffer(m_imageStagingBuffer, 0);
 
@@ -361,7 +274,6 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	std::vector<BlitImage> blitImages;
 	std::vector<VkBufferImageCopy> copies;
 	std::vector<VkImageMemoryBarrier> layoutTransferTransitionBarriers;
-	std::vector<VkImageMemoryBarrier> layoutGeneralTransitionBarriers;
 	std::vector<VkImageMemoryBarrier> layoutSampledTransitionBarriers;
 	blitImages.reserve(m_textureImages.size());
 	copies.reserve(m_textureImages.size());
@@ -390,57 +302,36 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 
 	size_t blitImageIndex = 0;
 	for (auto& image : m_textureImages) {
-		layoutTransferTransitionBarriers.push_back(
-			{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-			  .srcAccessMask = VK_ACCESS_HOST_WRITE_BIT,
-			  .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-			  .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			  .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			  .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			  .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			  .image = image,
-			  .subresourceRange = {
-				  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				  .baseMipLevel = 0,
-				  .levelCount = static_cast<uint32_t>(
-					  log2(std::min(blitImages[blitImageIndex].height, blitImages[blitImageIndex].width))),
-				  .baseArrayLayer = 0,
-				  .layerCount = 1,
-			  } });
-		layoutGeneralTransitionBarriers.push_back(
-			{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-			  .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-			  .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
-			  .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			  .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-			  .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			  .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			  .image = image,
-			  .subresourceRange = {
-				  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				  .baseMipLevel = 0,
-				  .levelCount = static_cast<uint32_t>(
-					  log2(std::min(blitImages[blitImageIndex].height, blitImages[blitImageIndex].width))),
-				  .baseArrayLayer = 0,
-				  .layerCount = 1,
-			  } });
-		layoutSampledTransitionBarriers.push_back(
-			{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-			  .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-			  .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-			  .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-			  .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			  .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			  .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			  .image = image,
-			  .subresourceRange = {
-				  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				  .baseMipLevel = 0,
-				  .levelCount = static_cast<uint32_t>(
-					  log2(std::min(blitImages[blitImageIndex].height, blitImages[blitImageIndex].width))),
-				  .baseArrayLayer = 0,
-				  .layerCount = 1,
-			  } });
+		layoutTransferTransitionBarriers.push_back({ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+													 .srcAccessMask = VK_ACCESS_HOST_WRITE_BIT,
+													 .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+													 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+													 .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+													 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+													 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+													 .image = image,
+													 .subresourceRange = {
+														 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+														 .baseMipLevel = 0,
+														 .levelCount = 1,
+														 .baseArrayLayer = 0,
+														 .layerCount = 1,
+													 } });
+		layoutSampledTransitionBarriers.push_back({ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+													.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+													.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+													.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+													.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+													.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+													.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+													.image = image,
+													.subresourceRange = {
+														.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+														.baseMipLevel = 0,
+														.levelCount = 1,
+														.baseArrayLayer = 0,
+														.layerCount = 1,
+													} });
 		blitImages[blitImageIndex].image = image;
 		++blitImageIndex;
 	}
@@ -478,54 +369,6 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 		++copyIndex;
 	}
 
-	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
-						 0, nullptr, layoutGeneralTransitionBarriers.size(), layoutGeneralTransitionBarriers.data());
-
-	VkMemoryBarrier transferBarrier = { .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-										.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-										.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT };
-
-	uint32_t mipIndex = 0;
-	while (!blitImages.empty()) {
-		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
-							 &transferBarrier, 0, nullptr, 0, nullptr);
-
-		for (size_t i = 0; i < blitImages.size(); ++i) {
-			if (std::min(blitImages[i].width, blitImages[i].height) == 0) {
-				printf("Detected mip level with size 0, ..somehow? minIndex = %ull\n", mipIndex);
-				blitImages.erase(blitImages.begin() + i);
-				--i;
-			} else if (std::min(blitImages[i].width, blitImages[i].height) < 4) {
-				blitImages.erase(blitImages.begin() + i);
-				--i;
-			}
-		}
-
-		for (auto& image : blitImages) {
-			int32_t mipHeight = image.height / 2;
-			int32_t mipWidth = image.width / 2;
-
-			VkImageBlit blit = {
-				.srcSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-									.mipLevel = mipIndex,
-									.baseArrayLayer = 0,
-									.layerCount = 1 },
-				.srcOffsets = { {}, { .x = image.width, .y = image.height, .z = 1 } },
-				.dstSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-									.mipLevel = mipIndex + 1,
-									.baseArrayLayer = 0,
-									.layerCount = 1 },
-				.dstOffsets = { {}, { .x = mipWidth, .y = mipHeight, .z = 1 } },
-			};
-
-			vkCmdBlitImage(commandBuffer, image.image, VK_IMAGE_LAYOUT_GENERAL, image.image, VK_IMAGE_LAYOUT_GENERAL, 1,
-						   &blit, VK_FILTER_LINEAR);
-			image.height = mipHeight;
-			image.width = mipWidth;
-		}
-		++mipIndex;
-	}
-
 	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0,
 						 0, nullptr, 0, nullptr, layoutSampledTransitionBarriers.size(),
 						 layoutSampledTransitionBarriers.data());
@@ -533,7 +376,7 @@ ModelLoader::ModelLoader(RayTracingDevice& device, MemoryAllocator& allocator, O
 	verifyResult(vkEndCommandBuffer(commandBuffer));
 
 	dispatcher.submit(commandBuffer, {});
-	dispatcher.waitForFence(commandBuffer, UINT64_MAX); // bad but ¯\_()_/¯
+	dispatcher.waitForFence(commandBuffer, UINT64_MAX); // bad but ï¿½\_()_/ï¿½
 
 	VkBufferDeviceAddressInfo addressInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
 											  .buffer = m_vertexBuffer };
@@ -645,24 +488,21 @@ ModelLoader::~ModelLoader() {
 
 void ModelLoader::addScene(cgltf_data* data, cgltf_scene* scene) {
 	for (cgltf_size i = 0; i < scene->nodes_count; ++i) {
-		float translation[3] = { 0.0f, 0.0f, 0.0f };
-		float rotation[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-		float scale[3] = { 1.0f, 1.0f, 1.0f };
+		glm::vec3 translation = glm::vec3(0.0f);
+		glm::quat rotation = glm::quat(0.0f, 0.0f, 0.0f, 1.0f);
+		glm::vec3 scale = glm::vec3(1.0f);
 		addNode(data, scene->nodes[i], translation, rotation, scale);
 	}
 }
 
-void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[3], float rotation[4], float scale[3]) {
+void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, glm::vec3& translation, glm::quat& rotation,
+						  glm::vec3& scale) {
 	// local -> global transform
-	float localTranslation[3];
-	float localRotation[4];
-	float localRotationFlipped[4];
-	float localScale[3];
+	glm::vec3 localTranslation = glm::vec3(0.0f);
+	glm::quat localRotation = glm::quat(0.0f, 0.0f, 0.0f, 1.0f);
+	glm::quat localRotationFlipped = glm::quat();
+	glm::vec3 localScale = glm::vec3(1.0f);
 
-	std::memcpy(localTranslation, translation, 3 * sizeof(float));
-	std::memcpy(localRotation, rotation, 4 * sizeof(float));
-	std::memcpy(localRotationFlipped, rotation, 4 * sizeof(float));
-	std::memcpy(localScale, scale, 3 * sizeof(float));
 	// resolve child transforms and make global
 	if (node->has_scale) {
 		for (size_t i = 0; i < 3; ++i) {
@@ -677,100 +517,53 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	if (node->has_rotation) {
 		// multiply quaternions
 		// https://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/arithmetic/index.htm
-		localRotation[0] = node->rotation[3] * rotation[0] + node->rotation[1] * rotation[2] +
-						   node->rotation[2] * rotation[1] + node->rotation[0] * rotation[3];
-		localRotation[1] = node->rotation[1] * rotation[3] + node->rotation[3] * rotation[1] +
-						   node->rotation[2] * rotation[0] + node->rotation[0] * rotation[2];
-		localRotation[2] = node->rotation[3] * rotation[2] + node->rotation[1] * rotation[0] +
-						   node->rotation[2] * rotation[3] + node->rotation[0] * rotation[1];
-		localRotation[3] = node->rotation[3] * rotation[3] + node->rotation[1] * rotation[1] +
-						   node->rotation[2] * rotation[2] + node->rotation[0] * rotation[0];
+		localRotation =
+			glm::quat(node->rotation[0], node->rotation[1], node->rotation[2], node->rotation[3]) * rotation;
 	}
 
-	float flipQuat[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
-	localRotationFlipped[0] = localRotation[3] * flipQuat[0] + localRotation[1] * flipQuat[2] +
-							  localRotation[2] * flipQuat[1] + localRotation[0] * flipQuat[3];
-	localRotationFlipped[1] = localRotation[1] * flipQuat[3] + localRotation[3] * flipQuat[1] +
-							  localRotation[2] * flipQuat[0] + localRotation[0] * flipQuat[2];
-	localRotationFlipped[2] = localRotation[3] * flipQuat[2] + localRotation[1] * flipQuat[0] +
-							  localRotation[2] * flipQuat[3] + localRotation[0] * flipQuat[1];
-	localRotationFlipped[3] = localRotation[3] * flipQuat[3] + localRotation[1] * flipQuat[1] +
-							  localRotation[2] * flipQuat[2] + localRotation[0] * flipQuat[0];
+	glm::quat flipQuat = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
 	// clang-format off
-	//https://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToMatrix/index.htm
-	//assumed column-major matrix layout
-	float quatRotationMatrix[16] = {
-		 localRotationFlipped[3],  localRotationFlipped[2], -localRotationFlipped[1], -localRotationFlipped[0],
-		-localRotationFlipped[2],  localRotationFlipped[3],  localRotationFlipped[0], -localRotationFlipped[1],
-		 localRotationFlipped[1], -localRotationFlipped[0],  localRotationFlipped[3], -localRotationFlipped[2],
-		 localRotationFlipped[0],  localRotationFlipped[1],  localRotationFlipped[2],  localRotationFlipped[3],
-	};
-	float quatRotationMatrixFactor[16] = {
-		 localRotationFlipped[3],  localRotationFlipped[2], -localRotationFlipped[1], localRotationFlipped[0],
-		-localRotationFlipped[2],  localRotationFlipped[3],  localRotationFlipped[0], localRotationFlipped[1],
-		 localRotationFlipped[1], -localRotationFlipped[0],  localRotationFlipped[3], localRotationFlipped[2],
-		-localRotationFlipped[0], -localRotationFlipped[1], -localRotationFlipped[2], localRotationFlipped[3],
-	};
+	glm::mat4 translationMatrix = glm::mat4( //only translation at first, becomes transform matrix through matrix multiplications
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		localTranslation[0], localTranslation[1], localTranslation[2], 1.0f
+	);
 
-	float translationMatrix[16] = { //only translation at first, becomes transform matrix through matrix multiplications
-		1.0f, 0.0f, 0.0f, localTranslation[0],
-		0.0f, 1.0f, 0.0f, -localTranslation[1],
-		0.0f, 0.0f, 1.0f, -localTranslation[2],
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
-
-	float scaleMatrix[16] = {
+	glm::mat4 scaleMatrix = glm::mat4(
 		localScale[0], 0.0f,		  0.0f,			 0.0f,
 		0.0f,		   localScale[1], 0.0f,		 0.0f,
 		0.0f,		   0.0f,		  localScale[2], 0.0f,
 		0.0f,		   0.0f,		  0.0f,			 1.0f
-	};
-	float coordinateScaleMatrix[16] = {
+	);
+	glm::mat4 coordinateScaleMatrix = glm::mat4(
 		1.0f,  0.0f, 0.0f, 0.0f,
 		0.0f, -1.0f, 0.0f, 0.0f,
 		0.0f,  0.0f, 1.0f, 0.0f,
 		0.0f,  0.0f, 0.0f, 1.0f
-	};
+	);
 
-	float noRotationTransformMatrix[16];
-	float noTranslationTransformMatrix[16];
-	float transformMatrix[16] = {
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
-	float normalTransformMatrix[16] = {
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
+	glm::mat4 noRotationTransformMatrix;
+	glm::mat4 noTranslationTransformMatrix;
+	glm::mat4 transformMatrix = glm::mat4(1.0f);
+	glm::mat4 normalTransformMatrix = coordinateScaleMatrix * glm::mat4(localRotation);
 	// clang-format on
-	std::memcpy(noRotationTransformMatrix, translationMatrix, 16 * sizeof(float));
-	multiply_mat4(noRotationTransformMatrix, scaleMatrix);
-
-	multiply_mat4(quatRotationMatrix, quatRotationMatrixFactor);
-
-	multiply_mat4(transformMatrix, scaleMatrix);
-	multiply_mat4(transformMatrix, quatRotationMatrix);
-	multiply_mat4(transformMatrix, translationMatrix);
-
-	multiply_mat4(normalTransformMatrix, quatRotationMatrix);
+	noRotationTransformMatrix = coordinateScaleMatrix * (translationMatrix * scaleMatrix);
+	transformMatrix = coordinateScaleMatrix * (translationMatrix * glm::mat4(localRotation) * scaleMatrix);
 
 	if (node->camera && node->camera->type == cgltf_camera_type_perspective) {
-		float baseDirection[3] = { 0.0f, 0.0f, -1.0f };
-		multiply_mat4_vec3_w0(baseDirection, quatRotationMatrix);
+		glm::vec4 baseDirection = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
+		baseDirection = glm::mat4(localRotation) * baseDirection;
 
-		float baseRight[3] = { 1.0f, 0.0f, 0.0f };
-		multiply_mat4_vec3_w0(baseRight, quatRotationMatrix);
+		glm::vec4 baseRight = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+		baseRight = glm::mat4(localRotation) * baseRight;
 
 		m_camera = { .fov = node->camera->data.perspective.yfov, .znear = node->camera->data.perspective.znear };
 
-		std::memcpy(m_camera.direction, baseDirection, 3 * sizeof(float));
-		std::memcpy(m_camera.right, baseRight, 3 * sizeof(float));
-		std::memcpy(m_camera.position, localTranslation, 3 * sizeof(float));
+		std::memcpy(m_camera.direction, &baseDirection[0], 3 * sizeof(float));
+		std::memcpy(m_camera.right, &baseRight[0], 3 * sizeof(float));
+		std::memcpy(m_camera.position, &localTranslation[0], 3 * sizeof(float));
 
 		m_camera.position[2] = -m_camera.position[2];
 
@@ -780,6 +573,8 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 	}
 
 	if (node->mesh) {
+		transformMatrix = glm::transpose(transformMatrix);
+		normalTransformMatrix = glm::transpose(normalTransformMatrix);
 		// TODO: this essentially de-instantiates meshes, so no instancing - maybe later?
 		for (cgltf_size i = 0; i < node->mesh->primitives_count; ++i) {
 			cgltf_primitive* primitive = node->mesh->primitives + i;
@@ -791,7 +586,7 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 
 			Geometry geometry{};
 
-			float aabbMin[3], aabbMax[3];
+			glm::vec3 aabbMin, aabbMax;
 
 			for (cgltf_size j = 0; j < primitive->attributes_count; ++j) {
 				cgltf_attribute* attribute = primitive->attributes + j;
@@ -804,8 +599,8 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 
 				switch (attribute->type) {
 					case cgltf_attribute_type_position:
-						std::memcpy(aabbMin, attribute->data->min, 3 * sizeof(float));
-						std::memcpy(aabbMax, attribute->data->max, 3 * sizeof(float));
+						std::memcpy(&aabbMin[0], attribute->data->min, 3 * sizeof(float));
+						std::memcpy(&aabbMax[0], attribute->data->max, 3 * sizeof(float));
 
 						geometry.vertexCount = attribute->data->count;
 
@@ -838,8 +633,8 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 
 			geometry.indexCount = primitive->indices->count;
 
-			multiply_mat4_vec3_w1(aabbMin, noRotationTransformMatrix);
-			multiply_mat4_vec3_w1(aabbMax, noRotationTransformMatrix);
+			aabbMin = noRotationTransformMatrix * glm::vec4(aabbMin, 1.0f);
+			aabbMax = noRotationTransformMatrix * glm::vec4(aabbMax, 1.0f);
 
 			m_modelBounds.xmin = std::min(m_modelBounds.xmin, aabbMin[0]);
 			m_modelBounds.ymin = std::min(m_modelBounds.ymin, aabbMin[1]);
@@ -855,8 +650,8 @@ void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, float translation[
 							  .ymax = aabbMax[1],
 							  .zmax = aabbMax[2] };
 
-			std::memcpy(geometry.transformMatrix, transformMatrix, 16 * sizeof(float));
-			std::memcpy(geometry.normalTransformMatrix, normalTransformMatrix, 16 * sizeof(float));
+			std::memcpy(geometry.transformMatrix, &transformMatrix[0][0], 16 * sizeof(float));
+			std::memcpy(geometry.normalTransformMatrix, &normalTransformMatrix[0][0], 16 * sizeof(float));
 
 			m_geometries.push_back(std::move(geometry));
 		}
@@ -1002,7 +797,7 @@ void ModelLoader::copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t&
 					m_globalMaterialIndexOffset; // sure hope the material is in that array, otherwise bad stuff ensues
 
 				m_geometries[currentGeometryIndex].isAlphaTested =
-					primitive->material->alpha_mode == cgltf_alpha_mode_mask;
+					primitive->material->alpha_mode != cgltf_alpha_mode_opaque;
 			}
 
 			m_gpuGeometries.push_back(
@@ -1079,7 +874,7 @@ void ModelLoader::addMaterial(cgltf_data* data, cgltf_material* material) {
 		newMaterial.emissiveFactor[3] = 1.0f;
 		newMaterial.roughnessFactor = material->pbr_metallic_roughness.roughness_factor;
 		newMaterial.metallicFactor = material->pbr_metallic_roughness.metallic_factor;
-		newMaterial.alphaCutoff = material->alpha_mode == cgltf_alpha_mode_mask ? material->alpha_cutoff : 0.0f;
+		newMaterial.alphaCutoff = material->alpha_mode == cgltf_alpha_mode_blend ? 0.9f : material->alpha_cutoff;
 
 		if (material->has_emissive_strength) {
 			newMaterial.emissiveFactor[0] *= material->emissive_strength.emissive_strength;
@@ -1132,7 +927,7 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 		.extent = { .width = static_cast<uint32_t>(imageData.width),
 					.height = static_cast<uint32_t>(imageData.height),
 					.depth = 1 },
-		.mipLevels = static_cast<uint32_t>(log2(std::min(imageData.width, imageData.height))),
+		.mipLevels = 1,
 		.arrayLayers = 1,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
 		.tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -1158,7 +953,7 @@ void ModelLoader::addImage(cgltf_data* data, cgltf_image* image, const std::stri
 						   .subresourceRange = {
 							   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 							   .baseMipLevel = 0,
-							   .levelCount = static_cast<uint32_t>(log2(std::min(imageData.width, imageData.height))),
+							   .levelCount = 1,
 							   .baseArrayLayer = 0,
 							   .layerCount = 1,
 						   } };

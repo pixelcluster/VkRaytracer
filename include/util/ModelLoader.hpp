@@ -6,6 +6,9 @@
 #include <util/MemoryAllocator.hpp>
 #include <util/OneTimeDispatcher.hpp>
 #include <vector>
+#include <glm/glm.hpp>
+#define GLM_FORCE_QUAT_DATA_XYZW
+#include <glm/gtc/quaternion.hpp>
 
 struct AABB {
 	float xmin, ymin, zmin;
@@ -153,7 +156,7 @@ class ModelLoader {
 
   private:
 	void addScene(cgltf_data* data, cgltf_scene* scene);
-	void addNode(cgltf_data* data, cgltf_node* node, float translation[3], float rotation[4], float scale[3]);
+	void addNode(cgltf_data* data, cgltf_node* node, glm::vec3& translation, glm::quat& rotation, glm::vec3& scale);
 
 	void copySceneGeometries(cgltf_data* data, cgltf_scene* scene, size_t& currentGeometryIndex);
 	void copyNodeGeometries(cgltf_data* data, cgltf_node* node, size_t& currentGeometryIndex);

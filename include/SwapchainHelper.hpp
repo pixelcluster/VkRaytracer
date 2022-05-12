@@ -7,6 +7,7 @@
 #include <vector>
 #include <volk.h>
 #include <vulkan/vulkan.h>
+#include <algorithm>
 
 VkSwapchainKHR createSwapchain(VkPhysicalDevice physicalDevice, VkDevice device, VkSurfaceKHR surface,
 							   VkExtent2D imageExtent, VkSwapchainKHR oldSwapchain, bool nameSwapchain) {
