@@ -1,5 +1,6 @@
 #include <ErrorHelper.hpp>
 #include <Window.hpp>
+#include <iostream>
 
 Window::Window(const std::string_view& windowName) {
 	glfwWindowHint(GLFW_STICKY_KEYS, GLFW_TRUE);
@@ -18,6 +19,14 @@ Window::Window(const std::string_view& windowName, size_t windowWidth, size_t wi
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	m_window = glfwCreateWindow(static_cast<int>(windowWidth), static_cast<int>(windowHeight), windowName.data(),
 								nullptr, nullptr);
+	const char* desc;
+	int error;
+	do {
+		error = glfwGetError(&desc);
+		if (error) {
+			std::cout << "GLFW error! " << desc << "\n";
+		}
+	} while (error);
 
 	m_width = windowWidth;
 	m_height = windowHeight;

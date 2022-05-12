@@ -4,12 +4,18 @@
 #include <util/AccelerationStructureBuilder.hpp>
 #include <util/ModelLoader.hpp>
 #include <volk.h>
+#include <iostream>
 
 int main(int argc, const char** argv) {
 	verifyResult(volkInitialize());
 	glfwInit();
+	const char* desc;
+	int error = glfwGetError(&desc);
+	if(error) {
+		std::cout << "GLFW error! " << desc << "\n";
+	}
 
-	RayTracingDevice device = RayTracingDevice(true);
+	RayTracingDevice device = RayTracingDevice(640, 480, true);
 
 	std::vector<std::string_view> gltfFilenames;
 	gltfFilenames.reserve(argc - 1);
