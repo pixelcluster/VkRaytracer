@@ -12,6 +12,7 @@ struct PushConstantData {
 	float aspectRatio;
 	float tanHalfFov;
 	float time;
+	float exposure;
 	uint32_t accumulatedSampleCount;
 };
 

@@ -1,7 +1,7 @@
 #include <Raytracer.hpp>
-#include <numbers>
-#include <cstring>
 #include <cmath>
+#include <cstring>
+#include <numbers>
 
 TriangleMeshRaytracer::TriangleMeshRaytracer(RayTracingDevice& device, MemoryAllocator& allocator, ModelLoader& loader,
 											 PipelineBuilder& pipelineBuilder,
@@ -225,12 +225,19 @@ bool TriangleMeshRaytracer::update() {
 		m_worldPos[2] -= 2.0f * deltaTime * worldUp[2];
 		resetSampleCount();
 	}
+	if (m_device.window().keyPressed(GLFW_KEY_KP_ADD)) {
+		m_exposure += 2.0f * deltaTime;
+	}
+	if (m_device.window().keyPressed(GLFW_KEY_KP_SUBTRACT)) {
+		m_exposure -= 2.0f * deltaTime;
+	}
+
+	m_exposure = std::max(0.0f, m_exposure);
 
 	if (m_accumulatedSampleCount < m_maxSamples) {
 		++m_accumulatedSampleCount;
 		m_accumulatedSampleTime += deltaTime;
-	}
-	else if (m_accumulatedSampleCount != -1U) {
+	} else if (m_accumulatedSampleCount != -1U) {
 		printf("Max. sample count reached. Time=%f s\n", m_accumulatedSampleTime);
 		m_accumulatedSampleCount = -1U;
 	}
@@ -303,6 +310,7 @@ bool TriangleMeshRaytracer::update() {
 											 static_cast<float>(m_device.window().height()),
 							  .tanHalfFov = tanf((45.0f / 180.0f) * std::numbers::pi / 2.0f),
 							  .time = static_cast<float>(fmod(glfwGetTime(), 20000.0f)),
+							  .exposure = m_exposure,
 							  .accumulatedSampleCount = m_accumulatedSampleCount };
 	vkCmdPushConstants(frameData.commandBuffer, m_pipelineBuilder.pipelineLayout(), VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0,
 					   sizeof(PushConstantData), &data);
@@ -311,7 +319,8 @@ bool TriangleMeshRaytracer::update() {
 								m_modelLoader.textureDescriptorSet() };
 
 	vkCmdBindDescriptorSets(frameData.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
-							m_pipelineBuilder.pipelineLayout(), 0, m_modelLoader.textures().size() ? 3 : 2, sets, 0, nullptr);
+							m_pipelineBuilder.pipelineLayout(), 0, m_modelLoader.textures().size() ? 3 : 2, sets, 0,
+							nullptr);
 
 	VkStridedDeviceAddressRegionKHR nullRegion = {};
 	VkStridedDeviceAddressRegionKHR raygenRegion = m_pipelineBuilder.raygenDeviceAddressRegion();

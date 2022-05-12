@@ -256,6 +256,7 @@ void RayTracingDevice::init(bool enableHardwareRaytracing) {
 		createPerFrameData(i);
 	}
 
+	m_window.pollEvents();
 	m_swapchain = createSwapchain(m_physicalDevice, m_device, m_surface,
 								  { static_cast<uint32_t>(m_window.width()), static_cast<uint32_t>(m_window.height()) },
 								  VK_NULL_HANDLE, enableDebugUtils);

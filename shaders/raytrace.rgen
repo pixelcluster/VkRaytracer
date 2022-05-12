@@ -12,6 +12,7 @@ layout(push_constant) uniform ScreenDim {
 	float aspectRatio;
 	float tanHalfFoV;
 	float time;
+	float exposure;
 	uint accumulatedSampleCount;
 };
 
@@ -35,7 +36,7 @@ void main() {
 	vec4 prevAccumulatedRadiance = imageLoad(accumulationImage, ivec2(gl_LaunchIDEXT.xy));
 
 	if(accumulatedSampleCount == -1U) {
-		//prevAccumulatedRadiance = prevAccumulatedRadiance / (prevAccumulatedRadiance + vec4(1.0f, 1.0f, 1.0f, 0.0f));
+		prevAccumulatedRadiance = vec4(1.0f) - exp(-prevAccumulatedRadiance * exposure);
 		prevAccumulatedRadiance = pow(prevAccumulatedRadiance, 1.0f / 2.2f.xxxx);
 		imageStore(outputImage, ivec2(gl_LaunchIDEXT.xy), prevAccumulatedRadiance);
 		return;
@@ -80,7 +81,7 @@ void main() {
 	
 	imageStore(accumulationImage, ivec2(gl_LaunchIDEXT.xy), accumulatedRadiance);
 
-	//accumulatedRadiance = accumulatedRadiance / (accumulatedRadiance + vec4(1.0f, 1.0f, 1.0f, 0.0f));
+	accumulatedRadiance = vec4(1.0f) - exp(-accumulatedRadiance * exposure);
 	accumulatedRadiance = pow(accumulatedRadiance, 1.0f / 2.2f.xxxx);
 	imageStore(outputImage, ivec2(gl_LaunchIDEXT.xy), accumulatedRadiance);
 }
