@@ -231,6 +231,16 @@ bool TriangleMeshRaytracer::update() {
 	if (m_device.window().keyPressed(GLFW_KEY_KP_SUBTRACT)) {
 		m_exposure -= 2.0f * deltaTime;
 	}
+	if(m_device.window().keyPressed(GLFW_KEY_F)) {
+		if(!m_pressedFullscreenSwitch) {
+			m_device.window().switchFullscreenWindowed();
+			m_pressedFullscreenSwitch = true;
+			m_device.enqueueRecreateSwapchain();
+		}
+	}
+	else {
+		m_pressedFullscreenSwitch = false;
+	}
 
 	m_exposure = std::max(0.0f, m_exposure);
 

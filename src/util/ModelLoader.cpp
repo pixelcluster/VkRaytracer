@@ -498,10 +498,10 @@ void ModelLoader::addScene(cgltf_data* data, cgltf_scene* scene) {
 void ModelLoader::addNode(cgltf_data* data, cgltf_node* node, glm::vec3& translation, glm::quat& rotation,
 						  glm::vec3& scale) {
 	// local -> global transform
-	glm::vec3 localTranslation = glm::vec3(0.0f);
+	glm::vec3 localTranslation = translation;
 	glm::quat localRotation = glm::quat(0.0f, 0.0f, 0.0f, 1.0f);
 	glm::quat localRotationFlipped = glm::quat();
-	glm::vec3 localScale = glm::vec3(1.0f);
+	glm::vec3 localScale = scale;
 
 	// resolve child transforms and make global
 	if (node->has_scale) {

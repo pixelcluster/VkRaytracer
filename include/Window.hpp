@@ -26,6 +26,8 @@ class Window {
 
 	void pollEvents();
 	void waitEvents();
+	
+	void switchFullscreenWindowed();
 
 	bool shouldWindowClose() const;
 

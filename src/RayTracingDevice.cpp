@@ -389,7 +389,6 @@ FrameData RayTracingDevice::beginFrame() {
 							{ static_cast<uint32_t>(m_window.width()), static_cast<uint32_t>(m_window.height()) },
 							m_swapchain, enableDebugUtils);
 		createSwapchainResources();
-		m_shouldNotifySizeChange = true;
 	}
 
 	VkResult acquireResult = vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
@@ -463,13 +462,16 @@ bool RayTracingDevice::endFrame() {
 
 	vkQueuePresentKHR(m_queue, &presentInfo);
 
-	if (presentResult == VK_SUBOPTIMAL_KHR) {
+	if (presentResult == VK_SUBOPTIMAL_KHR || m_shouldRecreateSwapchain) {
+		if (presentResult != VK_ERROR_OUT_OF_DATE_KHR)
+			verifyResult(presentResult);
 		m_swapchain =
 			createSwapchain(m_physicalDevice, m_device, m_surface,
 							{ static_cast<uint32_t>(m_window.width()), static_cast<uint32_t>(m_window.height()) },
 							m_swapchain, enableDebugUtils);
 		createSwapchainResources();
 		m_shouldNotifySizeChange = true;
+		m_shouldRecreateSwapchain = false;
 	} else if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_isSwapchainGood = false;
 	} else

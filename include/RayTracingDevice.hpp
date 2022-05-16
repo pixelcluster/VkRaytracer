@@ -1,8 +1,8 @@
 #pragma once
 
+#include <Config.hpp>
 #include <Window.hpp>
 #include <vector>
-#include <Config.hpp>
 
 // Data provided to render one frame.
 struct FrameData {
@@ -15,7 +15,6 @@ struct FrameData {
 
 	bool windowSizeChanged = false;
 };
-
 
 struct BufferAllocationRequirements {
 	VkDeviceSize size, alignment;
@@ -40,6 +39,8 @@ class RayTracingDevice {
 	// Ends the currently begun command buffer, submits it, and presents the acquired image.
 	bool endFrame();
 
+	void enqueueRecreateSwapchain() { m_shouldRecreateSwapchain = true; }
+
 	VkDevice device() const { return m_device; }
 	VkPhysicalDevice physicalDevice() const { return m_physicalDevice; }
 	VkQueue queue() const { return m_queue; }
@@ -54,6 +55,7 @@ class RayTracingDevice {
 	void waitAllFences() const;
 
 	const Window& window() const { return m_window; }
+	Window& window() { return m_window; }
 
   private:
 	void init(bool enableHardwareRaytracing);
@@ -77,6 +79,7 @@ class RayTracingDevice {
 	VkSwapchainKHR m_swapchain;
 	bool m_isSwapchainGood = true;
 	bool m_shouldNotifySizeChange = false;
+	bool m_shouldRecreateSwapchain = false;
 	std::vector<VkImageView> m_swapchainViews;
 	std::vector<VkImage> m_swapchainImages;
 

@@ -41,4 +41,6 @@ class TriangleMeshRaytracer {
 	float m_exposure = 3.0f;
 
 	double m_accumulatedSampleTime = 0.0f;
+	
+	bool m_pressedFullscreenSwitch = false;
 };

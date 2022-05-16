@@ -6,7 +6,8 @@ Window::Window(const std::string_view& windowName) {
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	const GLFWvidmode* primaryMonitorVidmode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-	m_window = glfwCreateWindow(primaryMonitorVidmode->width, primaryMonitorVidmode->height, windowName.data(), monitor, nullptr);
+	m_window = glfwCreateWindow(primaryMonitorVidmode->width, primaryMonitorVidmode->height, windowName.data(), monitor,
+								nullptr);
 
 	const char* desc;
 	int error;
@@ -97,3 +98,24 @@ void Window::waitEvents() {
 }
 
 bool Window::shouldWindowClose() const { return glfwWindowShouldClose(m_window); }
+
+void Window::switchFullscreenWindowed() {
+	if (glfwGetWindowMonitor(m_window)) {
+		glfwSetWindowMonitor(m_window, NULL, 0, 0, 640, 480, GLFW_DONT_CARE);
+	} else {
+		const GLFWvidmode* primaryMonitorVidmode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+		GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+		glfwSetWindowMonitor(m_window, monitor, 0, 0, primaryMonitorVidmode->width, primaryMonitorVidmode->height,
+							 GLFW_DONT_CARE);
+	}
+
+	int newWidth, newHeight;
+	glfwGetFramebufferSize(m_window, &newWidth, &newHeight);
+
+	size_t newWidthU = static_cast<size_t>(newWidth);
+	size_t newHeightU = static_cast<size_t>(newHeight);
+
+	if (newWidthU != m_width || newHeightU != m_height) {
+		m_windowSizeDirty = true;
+	}
+}
